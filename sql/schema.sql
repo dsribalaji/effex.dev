@@ -1,0 +1,68 @@
+CREATE DATABASE IF NOT EXISTS skillapp DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE skillapp;
+
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE conversations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(255) DEFAULT 'New Chat',
+  active_skill VARCHAR(100) NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  role ENUM('user','assistant','system') NOT NULL,
+  content MEDIUMTEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE artifacts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  user_id INT NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  file_type ENUM('md','pdf','docx','txt') NOT NULL,
+  content_blob LONGBLOB NOT NULL,
+  size_bytes INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE api_keys (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  label VARCHAR(100) NOT NULL,
+  provider VARCHAR(50) NOT NULL DEFAULT 'openai-compatible',
+  base_url VARCHAR(500) NOT NULL,
+  model VARCHAR(100) NOT NULL,
+  api_key VARCHAR(500) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 0,
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE uploads (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  user_id INT NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL,
+  content_blob LONGBLOB NOT NULL,
+  extracted_text MEDIUMTEXT NULL,
+  size_bytes INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

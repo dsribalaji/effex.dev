@@ -1,0 +1,13 @@
+Options -Indexes
+
+<Files "config.php">
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config/ - [F,L]
+    RewriteRule ^lib/ - [F,L]
+    RewriteRule ^sql/ - [F,L]
+</IfModule>
