@@ -4,7 +4,7 @@ require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/github_client.php';
 require_once __DIR__ . '/../lib/api_keys.php';
-require_once __DIR__ . '/../lib/groq_client.php';
+require_once __DIR__ . '/../lib/llm_client.php';
 
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
@@ -112,20 +112,22 @@ foreach ($history as $h) {
 $activeKey = api_key_get_active();
 if (!$activeKey) {
     // Fall back to config constants
+    $provider = 'openai-compatible';
     $apiKey = GROQ_API_KEY;
     $baseUrl = rtrim(GROQ_API_URL, '/');
     $model = GROQ_MODEL;
 } else {
+    $provider = $activeKey['provider'] ?? 'openai-compatible';
     $apiKey = $activeKey['api_key'];
     $baseUrl = rtrim($activeKey['base_url'], '/');
     $model = $activeKey['model'];
 }
 
 /* ── Stream ── */
-$fullReply = groq_stream_chat($messages, function ($token) {
+$fullReply = llm_stream_chat($messages, function ($token) {
     echo "data: " . json_encode(['token' => $token]) . "\n\n";
     ob_flush(); flush();
-}, $apiKey, $baseUrl, $model);
+}, $provider, $apiKey, $baseUrl, $model);
 
 /* ── Save assistant message ── */
 $stmt = $pdo->prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)');
@@ -139,7 +141,16 @@ if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
     $content = trim($m[2]);
 
     if ($content !== '' && $relPath !== '') {
-        $filename = basename($relPath);
+        // Keep the relative path so that the artifact is associated with its folder
+        // Security Fix: Prevent Path Traversal by stripping '..' and forcing valid characters
+        $safePath = str_replace(['..', "\0"], '', $relPath);
+        $safePath = preg_replace('/[^a-zA-Z0-9_\-\.\/ ]/', '', $safePath);
+        $safePath = trim($safePath, '/\\');
+
+        $filename = $safePath;
+        if ($filename === '') {
+            $filename = 'artifact_' . date('Ymd_His') . '.md';
+        }
         $fileType = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
         if (in_array($fileType, ['md', 'pdf', 'docx', 'txt'], true)) {

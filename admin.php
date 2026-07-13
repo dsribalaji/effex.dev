@@ -94,7 +94,8 @@ if (current_username() !== 'admin') {
                     <div class="form-group">
                         <label class="form-label">Provider</label>
                         <select name="provider" class="form-input">
-                            <option value="openai-compatible">OpenAI-Compatible</option>
+                            <option value="openai-compatible">OpenAI/Groq (OpenAI Compatible)</option>
+                            <option value="anthropic">Anthropic (Claude)</option>
                         </select>
                     </div>
                     <div class="form-group">
