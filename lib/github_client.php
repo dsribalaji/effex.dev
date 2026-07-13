@@ -7,7 +7,8 @@ require_once __DIR__ . '/../config/config.php';
  */
 function github_list_skills(): array
 {
-    $url = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/.copilot/skills';
+    // Currently hardcoded to fetch from the 'ba' role folder as requested
+    $url = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/ba/.copilot/skills';
     $items = github_get($url);
 
     $skills = [];
@@ -29,7 +30,7 @@ function github_list_skills(): array
  */
 function github_fetch_skill_meta(string $slug): ?array
 {
-    $base = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/.copilot/skills/' . rawurlencode($slug);
+    $base = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/ba/.copilot/skills/' . rawurlencode($slug);
     $files = github_get($base);
 
     foreach ($files as $file) {
