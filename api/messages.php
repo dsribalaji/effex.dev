@@ -24,6 +24,7 @@ switch ($method) {
             echo json_encode(['error' => 'Missing conversation_id']);
             exit;
         }
+        require_conversation_owner_api($convId, $userId);
 
         $stmt = $pdo->prepare('SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id ASC');
         $stmt->execute([$convId]);
@@ -41,6 +42,7 @@ switch ($method) {
             echo json_encode(['error' => 'Missing conversation_id or content']);
             exit;
         }
+        require_conversation_owner_api($convId, $userId);
 
         if (!in_array($role, ['user', 'assistant', 'system'], true)) {
             $role = 'user';

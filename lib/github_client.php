@@ -1,18 +1,29 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
 
+const GITHUB_CACHE_TTL = 600; // 10 minutes
+
 /**
  * Fetch all skill folders from the GitHub repo.
  * Returns array of ['slug' => 'folder-name', 'name' => '...', 'description' => '...', 'download_url' => '...']
+ *
+ * Results are cached on disk: listing skills costs 1 + N GitHub API calls, and
+ * without a GITHUB_TOKEN the unauthenticated limit (60/hr) is hit after a few
+ * page loads. On rate limit / network failure the stale cache is served.
  */
 function github_list_skills(): array
 {
+    $cached = github_cache_read('skills_list', GITHUB_CACHE_TTL);
+    if ($cached !== null) {
+        return json_decode($cached, true) ?: [];
+    }
+
     // Currently hardcoded to fetch from the 'ba' role folder as requested
     $url = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/ba/.copilot/skills';
     $items = github_get($url);
 
     $skills = [];
-    foreach ($items as $item) {
+    foreach ($items ?? [] as $item) {
         if (($item['type'] ?? '') !== 'dir') continue;
         $slug = $item['name'];
 
@@ -22,7 +33,14 @@ function github_list_skills(): array
         }
     }
 
-    return $skills;
+    if (!empty($skills)) {
+        github_cache_write('skills_list', json_encode($skills));
+        return $skills;
+    }
+
+    // Fetch failed (likely rate limited) — fall back to stale cache if we have one
+    $stale = github_cache_read('skills_list', 0);
+    return $stale !== null ? (json_decode($stale, true) ?: []) : [];
 }
 
 /**
@@ -64,14 +82,54 @@ function github_fetch_skill_meta(string $slug): ?array
 }
 
 /**
- * Fetch full SKILL.md content for a given slug.
+ * Fetch full SKILL.md content for a given slug (disk-cached, stale on failure).
  */
 function github_fetch_skill_content(string $slug): ?string
 {
-    $meta = github_fetch_skill_meta($slug);
-    if (!$meta) return null;
+    $cacheKey = 'skill_content_' . $slug;
+    $cached = github_cache_read($cacheKey, GITHUB_CACHE_TTL);
+    if ($cached !== null) {
+        return $cached;
+    }
 
-    return github_fetch_raw($meta['download_url']);
+    $meta = github_fetch_skill_meta($slug);
+    $content = $meta ? github_fetch_raw($meta['download_url']) : null;
+
+    if ($content !== null) {
+        github_cache_write($cacheKey, $content);
+        return $content;
+    }
+
+    return github_cache_read($cacheKey, 0);
+}
+
+/* ── Simple file cache (survives GitHub rate limits between requests) ── */
+
+function github_cache_dir(): string
+{
+    $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'skillapp_cache';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir;
+}
+
+/**
+ * Read a cache entry. $maxAge in seconds; 0 = ignore age (used as stale fallback).
+ */
+function github_cache_read(string $key, int $maxAge): ?string
+{
+    $file = github_cache_dir() . DIRECTORY_SEPARATOR . md5($key) . '.cache';
+    if (!is_file($file)) return null;
+    if ($maxAge > 0 && (time() - (int)filemtime($file)) > $maxAge) return null;
+
+    $data = @file_get_contents($file);
+    return $data === false ? null : $data;
+}
+
+function github_cache_write(string $key, string $value): void
+{
+    @file_put_contents(github_cache_dir() . DIRECTORY_SEPARATOR . md5($key) . '.cache', $value);
 }
 
 /**

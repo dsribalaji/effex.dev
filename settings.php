@@ -2,19 +2,13 @@
 session_start();
 require_once __DIR__ . '/lib/auth.php';
 require_login();
-
-if (current_username() !== 'admin') {
-    http_response_code(403);
-    echo '<h1>403 Forbidden</h1><p>Admin access required.</p><a href="index.php">Back to chat</a>';
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - SkillApp</title>
+    <title>Settings - SkillApp</title>
     <script>if(localStorage.getItem("daynight-theme")==="carbon"){document.documentElement.classList.add("carbon");}</script>
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
@@ -41,12 +35,12 @@ if (current_username() !== 'admin') {
                             </svg>
                             Chat
                         </a>
-                        <a href="admin.php" class="nav-link active">
+                        <a href="settings.php" class="nav-link active">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="3"/>
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                             </svg>
-                            Admin
+                            Settings
                         </a>
                     </div>
                 </div>
@@ -81,7 +75,11 @@ if (current_username() !== 'admin') {
 
         <main class="main-content">
             <div class="card" style="padding:2rem;">
-                <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:1.5rem;">API Key Management</h1>
+                <h1 style="font-size:1.5rem;font-weight:700;margin-bottom:0.5rem;">My API Keys</h1>
+                <p style="color:var(--text-secondary);margin-bottom:1.5rem;">
+                    Add your own LLM API key here. The key you <strong>Activate</strong> is used for your chats.
+                    Without an active key you cannot chat — every user brings their own key.
+                </p>
 
                 <div id="keyList" style="margin-bottom:2rem"></div>
 
@@ -89,7 +87,7 @@ if (current_username() !== 'admin') {
                 <form id="keyForm" class="key-form">
                     <div class="form-group">
                         <label class="form-label">Label</label>
-                        <input type="text" name="label" class="form-input" required placeholder="e.g. Groq Production">
+                        <input type="text" name="label" class="form-input" required placeholder="e.g. My Groq Key">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Provider</label>
@@ -121,6 +119,7 @@ if (current_username() !== 'admin') {
     (async function() {
         const keyList = document.getElementById('keyList');
         const form = document.getElementById('keyForm');
+        const API = 'api/user_keys.php';
 
         let csrfToken = '';
         try {
@@ -130,12 +129,12 @@ if (current_username() !== 'admin') {
         } catch(e) {}
 
         async function loadKeys() {
-            const res = await fetch('api/admin/keys.php');
+            const res = await fetch(API);
             const keys = await res.json();
             keyList.innerHTML = '';
 
-            if (keys.length === 0) {
-                keyList.innerHTML = '<p style="color:var(--text-secondary)">No API keys configured. Add one below.</p>';
+            if (!Array.isArray(keys) || keys.length === 0) {
+                keyList.innerHTML = '<p style="color:var(--text-secondary)">You have no API keys yet. Add one below.</p>';
                 return;
             }
 
@@ -150,8 +149,7 @@ if (current_username() !== 'admin') {
 
             for (const k of keys) {
                 const tr = document.createElement('tr');
-                const activeClass = k.is_active == 1 ? 'active-key' : '';
-                tr.className = activeClass;
+                tr.className = k.is_active == 1 ? 'active-key' : '';
                 tr.innerHTML = `
                     <td>${k.is_active == 1 ? '✓' : ''}</td>
                     <td>${esc(k.label)}</td>
@@ -170,7 +168,7 @@ if (current_username() !== 'admin') {
 
             table.querySelectorAll('.activate-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
-                    await fetch('api/admin/keys.php', {
+                    await fetch(API, {
                         method: 'PUT',
                         headers: {'Content-Type':'application/json','X-CSRF-Token':csrfToken},
                         body: JSON.stringify({action:'activate', id: parseInt(btn.dataset.id)})
@@ -182,7 +180,7 @@ if (current_username() !== 'admin') {
             table.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     if (!confirm('Delete this API key?')) return;
-                    await fetch('api/admin/keys.php?id=' + btn.dataset.id, {
+                    await fetch(API + '?id=' + btn.dataset.id, {
                         method: 'DELETE',
                         headers: {'X-CSRF-Token':csrfToken}
                     });
@@ -202,7 +200,7 @@ if (current_username() !== 'admin') {
                 api_key: fd.get('api_key'),
             };
 
-            const res = await fetch('api/admin/keys.php', {
+            const res = await fetch(API, {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','X-CSRF-Token':csrfToken},
                 body: JSON.stringify(data)

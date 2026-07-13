@@ -24,6 +24,7 @@ switch ($action) {
             echo json_encode(['error' => 'Missing conversation_id']);
             exit;
         }
+        require_conversation_owner_api($convId, $userId);
 
         $stmt = $pdo->prepare('SELECT id, filename, file_type, size_bytes, created_at FROM artifacts WHERE conversation_id = ? AND user_id = ? ORDER BY created_at DESC');
         $stmt->execute([$convId, $userId]);
@@ -80,6 +81,7 @@ switch ($action) {
 
         $input = json_decode(file_get_contents('php://input'), true);
         $convId = (int)($input['conversation_id'] ?? 0);
+        require_conversation_owner_api($convId, $userId);
         $filename = trim($input['filename'] ?? '');
         $content = $input['content'] ?? '';
         $fileType = strtolower(pathinfo($filename, PATHINFO_EXTENSION));

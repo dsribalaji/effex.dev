@@ -108,19 +108,23 @@ foreach ($history as $h) {
     $messages[] = ['role' => $h['role'], 'content' => $h['content']];
 }
 
-/* ── Resolve active API key ── */
-$activeKey = api_key_get_active();
-if (!$activeKey) {
-    // Fall back to config constants
-    $provider = 'openai-compatible';
-    $apiKey = GROQ_API_KEY;
-    $baseUrl = rtrim(GROQ_API_URL, '/');
-    $model = GROQ_MODEL;
-} else {
+/* ── Resolve API key: each user must bring their own (config constants only as local-dev fallback) ── */
+$activeKey = api_key_get_active($userId);
+if ($activeKey) {
     $provider = $activeKey['provider'] ?? 'openai-compatible';
     $apiKey = $activeKey['api_key'];
     $baseUrl = rtrim($activeKey['base_url'], '/');
     $model = $activeKey['model'];
+} elseif (defined('GROQ_API_KEY') && GROQ_API_KEY !== '') {
+    $provider = 'openai-compatible';
+    $apiKey = GROQ_API_KEY;
+    // llm_client appends /chat/completions itself; strip it if present in the config URL
+    $baseUrl = rtrim(preg_replace('#/chat/completions/?$#', '', GROQ_API_URL), '/');
+    $model = GROQ_MODEL;
+} else {
+    echo "data: " . json_encode(['error' => 'No API key configured. Open Settings (gear icon) and add your own API key to start chatting.']) . "\n\n";
+    ob_flush(); flush();
+    exit;
 }
 
 /* ── Stream ── */
@@ -134,6 +138,10 @@ $stmt = $pdo->prepare('INSERT INTO messages (conversation_id, role, content) VAL
 $stmt->execute([$convId, 'assistant', $fullReply]);
 $msgId = (int)$pdo->lastInsertId();
 
+/* ── Load skill folder mapping ── */
+$skillFolders = require_once __DIR__ . '/../config/skill_folders.php';
+$phaseFolder = $skillName && isset($skillFolders[$skillName]) ? $skillFolders[$skillName] : null;
+
 /* ── Check for SAVE_AS: artifact directive ── */
 $saved = [];
 if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
@@ -141,7 +149,10 @@ if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
     $content = trim($m[2]);
 
     if ($content !== '' && $relPath !== '') {
-        // Keep the relative path so that the artifact is associated with its folder
+        // Prepend phase folder if not already present and skill has a mapping
+        if ($phaseFolder && strpos($relPath, '/') === false && strpos($relPath, '\\') === false) {
+            $relPath = $phaseFolder . '/' . $relPath;
+        }
         // Security Fix: Prevent Path Traversal by stripping '..' and forcing valid characters
         $safePath = str_replace(['..', "\0"], '', $relPath);
         $safePath = preg_replace('/[^a-zA-Z0-9_\-\.\/ ]/', '', $safePath);
@@ -174,7 +185,8 @@ if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
 /* ── Also save implicitly for all responses ── */
 $isError = str_starts_with($fullReply, 'Error: API returned HTTP');
 if (!$isError && empty($saved) && strlen($fullReply) > 30) {
-    $fname = ($skillName ? $skillName : 'Response') . '_' . date('Ymd_His') . '.md';
+    $baseName = ($skillName ? $skillName : 'Response') . '_' . date('Ymd_His') . '.md';
+    $fname = $phaseFolder ? $phaseFolder . '/' . $baseName : $baseName;
     $blob = $fullReply;
 
     $stmt = $pdo->prepare('INSERT INTO artifacts (conversation_id, user_id, filename, file_type, content_blob, size_bytes) VALUES (?, ?, ?, ?, ?, ?)');

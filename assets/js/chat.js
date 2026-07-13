@@ -254,13 +254,23 @@
 
     /* ── Autocomplete for / commands and @ files ── */
     let filesCache = [];
+    let lastSkillsLoad = 0;
 
     async function loadSkills() {
+        lastSkillsLoad = Date.now();
         try {
             const res = await fetch('api/skills_list.php');
-            skillsCache = await res.json();
+            const data = await res.json();
+            skillsCache = Array.isArray(data) ? data : [];
         } catch (e) {
             skillsCache = [];
+        }
+    }
+
+    // If the skill list failed to load (e.g. GitHub rate limit), retry when the user needs it
+    function ensureSkillsLoaded() {
+        if (skillsCache.length === 0 && Date.now() - lastSkillsLoad > 10000) {
+            loadSkills().then(() => updateAutocomplete());
         }
     }
 
@@ -308,18 +318,33 @@
 
         const isSkill = textBeforeCursor[triggerIdx] === '/';
         const query = textBeforeCursor.slice(triggerIdx + 1).toLowerCase();
-        
+
+        // Once the query contains a space the command is finished — stop suggesting
+        if (query.includes(' ')) {
+            autocomplete.classList.add('hidden');
+            return;
+        }
+
         let matches = [];
-        
+
         if (isSkill) {
-            matches = skillsCache.filter(s => s.id.toLowerCase().startsWith(query)).map(s => ({
+            ensureSkillsLoaded();
+            let pool = skillsCache.filter(s => s.id.toLowerCase().startsWith(query));
+            if (pool.length === 0) {
+                pool = skillsCache.filter(s => s.id.toLowerCase().includes(query));
+            }
+            matches = pool.map(s => ({
                 type: 'skill',
                 id: s.id,
                 display: '/' + s.id,
                 desc: s.description
             }));
         } else {
-            matches = filesCache.filter(f => f.toLowerCase().startsWith(query)).map(f => ({
+            let pool = filesCache.filter(f => f.toLowerCase().startsWith(query));
+            if (pool.length === 0) {
+                pool = filesCache.filter(f => f.toLowerCase().includes(query));
+            }
+            matches = pool.map(f => ({
                 type: 'file',
                 id: f,
                 display: '@' + f,
@@ -380,9 +405,29 @@
     sendBtn.addEventListener('click', sendMessage);
 
     chatInput.addEventListener('keydown', (e) => {
+        const acOpen = !autocomplete.classList.contains('hidden');
+
+        // Autocomplete selection takes priority: Enter/Tab accepts, it must NOT send the message
+        if ((e.key === 'Enter' || e.key === 'Tab') && acOpen) {
+            const selected = autocomplete.querySelector('.selected') || autocomplete.querySelector('.autocomplete-item');
+            if (selected) {
+                e.preventDefault();
+                const type = selected.dataset.type;
+                const id = selected.dataset.id;
+
+                const textBeforeCursor = chatInput.value.slice(0, chatInput.selectionStart);
+                const slashIdx = textBeforeCursor.lastIndexOf('/');
+                const atIdx = textBeforeCursor.lastIndexOf('@');
+                const triggerIdx = Math.max(slashIdx, atIdx);
+
+                insertCommand(type, id, triggerIdx);
+                return;
+            }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
+            return;
         }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             const items = autocomplete.querySelectorAll('.autocomplete-item');
@@ -394,27 +439,15 @@
             items.forEach(el => el.classList.remove('selected'));
             items[idx].classList.add('selected');
         }
-        if (e.key === 'Enter' && !autocomplete.classList.contains('hidden')) {
-            const selected = autocomplete.querySelector('.selected');
-            if (selected) {
-                e.preventDefault();
-                const type = selected.dataset.type;
-                const id = selected.dataset.id;
-                
-                const textBeforeCursor = chatInput.value.slice(0, chatInput.selectionStart);
-                const slashIdx = textBeforeCursor.lastIndexOf('/');
-                const atIdx = textBeforeCursor.lastIndexOf('@');
-                const triggerIdx = Math.max(slashIdx, atIdx);
-                
-                insertCommand(type, id, triggerIdx);
-            }
-        }
         if (e.key === 'Escape') autocomplete.classList.add('hidden');
     });
 
     chatInput.addEventListener('input', updateAutocomplete);
 
     chatInput.addEventListener('blur', () => setTimeout(() => autocomplete.classList.add('hidden'), 200));
+
+    // Keep focus in the input when clicking a suggestion so blur doesn't hide the list mid-click
+    autocomplete.addEventListener('mousedown', (e) => e.preventDefault());
 
     /* ── Clear chat ── */
     clearChatBtn.addEventListener('click', async () => {

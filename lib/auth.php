@@ -64,6 +64,25 @@ function current_user_id(): int
     return (int)$_SESSION['user_id'];
 }
 
+function user_owns_conversation(int $convId, int $userId): bool
+{
+    $stmt = db()->prepare('SELECT id FROM conversations WHERE id = ? AND user_id = ?');
+    $stmt->execute([$convId, $userId]);
+    return (bool)$stmt->fetch();
+}
+
+/**
+ * API guard: 403 + exit unless the conversation belongs to the user.
+ */
+function require_conversation_owner_api(int $convId, int $userId): void
+{
+    if ($convId <= 0 || !user_owns_conversation($convId, $userId)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Conversation not found or access denied']);
+        exit;
+    }
+}
+
 function current_username(): string
 {
     return $_SESSION['username'] ?? '';

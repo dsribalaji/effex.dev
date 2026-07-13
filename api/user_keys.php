@@ -1,25 +1,23 @@
 <?php
 session_start();
-require_once __DIR__ . '/../../lib/auth.php';
-require_once __DIR__ . '/../../lib/db.php';
-require_once __DIR__ . '/../../lib/api_keys.php';
+require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/db.php';
+require_once __DIR__ . '/../lib/api_keys.php';
+require_once __DIR__ . '/../lib/csrf.php';
 
 header('Content-Type: application/json');
 require_login_api();
 
-// Only "admin" user can manage keys
-if (current_username() !== 'admin') {
-    http_response_code(403);
-    echo json_encode(['error' => 'Admin access required']);
-    exit;
-}
-
 $userId = current_user_id();
 $method = $_SERVER['REQUEST_METHOD'];
 
+if (in_array($method, ['POST', 'PUT', 'DELETE'], true)) {
+    require_csrf();
+}
+
 switch ($method) {
     case 'GET':
-        echo json_encode(api_key_get_all());
+        echo json_encode(api_key_get_all($userId));
         break;
 
     case 'POST':
@@ -38,10 +36,9 @@ switch ($method) {
 
         $id = api_key_create($label, $provider, $baseUrl, $model, $key, $userId);
 
-        // If this is the first key, auto-activate it
-        $all = api_key_get_all();
-        if (count($all) === 1) {
-            api_key_set_active($id);
+        // If this is the user's first key, auto-activate it
+        if (count(api_key_get_all($userId)) === 1) {
+            api_key_set_active($id, $userId);
         }
 
         echo json_encode(['id' => $id, 'success' => true]);
@@ -58,7 +55,7 @@ switch ($method) {
                 echo json_encode(['error' => 'Invalid id']);
                 exit;
             }
-            $ok = api_key_set_active($id);
+            $ok = api_key_set_active($id, $userId);
             echo json_encode(['success' => $ok]);
         } else {
             http_response_code(400);
@@ -73,7 +70,7 @@ switch ($method) {
             echo json_encode(['error' => 'Invalid id']);
             exit;
         }
-        $ok = api_key_delete($id);
+        $ok = api_key_delete($id, $userId);
         echo json_encode(['success' => $ok]);
         break;
 

@@ -23,6 +23,7 @@ switch ($action) {
             echo json_encode(['error' => 'Missing conversation_id']);
             exit;
         }
+        require_conversation_owner_api($convId, $userId);
 
         $stmt = $pdo->prepare('SELECT id, filename, mime_type, size_bytes, created_at FROM uploads WHERE conversation_id = ? AND user_id = ? ORDER BY created_at DESC');
         $stmt->execute([$convId, $userId]);
@@ -80,6 +81,7 @@ switch ($action) {
             echo json_encode(['error' => 'Missing conversation_id']);
             exit;
         }
+        require_conversation_owner_api($convId, $userId);
 
         if (empty($_FILES['file'])) {
             echo json_encode(['error' => 'No file uploaded']);
