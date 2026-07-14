@@ -7,6 +7,33 @@
     let csrfToken = null;
     window.__csrfToken = '';
 
+    /* ── Clipboard helper (shared with sidebar.js) ── */
+    window.copyToClipboard = async function(text, btn) {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                // http:// fallback (XAMPP over plain HTTP has no clipboard API)
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+            }
+            if (btn) {
+                const prev = btn.innerHTML;
+                btn.innerHTML = '✓';
+                btn.classList.add('copied');
+                setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('copied'); }, 1200);
+            }
+        } catch (e) {
+            console.warn('Copy failed', e);
+        }
+    };
+
     async function loadCsrfToken() {
         try {
             const res = await fetch('api/csrf_token.php');
@@ -29,11 +56,86 @@
     const sidebar = document.getElementById('sidebar');
     const autocomplete = document.getElementById('autocomplete');
 
+    /* ── Projects ── */
+
+    let activeProjectId = parseInt(localStorage.getItem('skillapp-project')) || null;
+    window.__activeProjectId = activeProjectId;
+    const projectSelector = document.getElementById('projectSelector');
+    const newProjectBtn = document.getElementById('newProjectBtn');
+    const exportProjectBtn = document.getElementById('exportProjectBtn');
+
+    async function loadProjects() {
+        const res = await fetch('api/projects.php');
+        const projects = await res.json();
+        if (!Array.isArray(projects) || projects.length === 0) return;
+
+        if (!activeProjectId || !projects.some(p => p.id === activeProjectId)) {
+            activeProjectId = projects[0].id;
+        }
+        window.__activeProjectId = activeProjectId;
+        localStorage.setItem('skillapp-project', activeProjectId);
+
+        projectSelector.innerHTML = '';
+        projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            if (p.id === activeProjectId) opt.selected = true;
+            projectSelector.appendChild(opt);
+        });
+    }
+
+    async function switchProject(id) {
+        activeProjectId = id;
+        window.__activeProjectId = id;
+        localStorage.setItem('skillapp-project', id);
+        if (window.closePreview) window.closePreview();
+
+        await loadConversations();
+        const firstId = convSelector.value ? parseInt(convSelector.value) : null;
+        if (firstId) {
+            await switchConversation(firstId);
+        } else {
+            await createConversation();
+        }
+    }
+
+    if (projectSelector) projectSelector.addEventListener('change', () => switchProject(parseInt(projectSelector.value)));
+
+    if (newProjectBtn) newProjectBtn.addEventListener('click', async () => {
+        const name = prompt('New project name:');
+        if (!name || !name.trim()) return;
+        const res = await fetch('api/projects.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
+            body: JSON.stringify({ name: name.trim() })
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        await loadProjects();
+        await switchProject(data.id);
+    });
+
+    if (exportProjectBtn) exportProjectBtn.addEventListener('click', () => {
+        if (!activeProjectId) return;
+        window.location.href = 'api/projects.php?action=export&id=' + activeProjectId;
+    });
+
     /* ── Conversation CRUD ── */
 
     async function loadConversations() {
-        const res = await fetch('api/conversations.php');
-        const convs = await res.json();
+        convList.innerHTML = '<li class="loading-state"><span class="spinner"></span> Loading conversations...</li>';
+
+        let convs;
+        try {
+            const url = 'api/conversations.php' + (activeProjectId ? '?project_id=' + activeProjectId : '');
+            const res = await fetch(url);
+            convs = await res.json();
+            if (!Array.isArray(convs)) throw new Error(convs && convs.error ? convs.error : 'Unexpected response');
+        } catch (e) {
+            convList.innerHTML = '<li class="empty-msg">Could not load conversations</li>';
+            return;
+        }
 
         convSelector.innerHTML = '';
         convList.innerHTML = '';
@@ -53,7 +155,7 @@
             const nameSpan = document.createElement('span');
             nameSpan.className = 'conv-name';
             nameSpan.textContent = c.title;
-            nameSpan.title = 'Click to rename';
+            nameSpan.title = 'Open conversation';
             nameSpan.addEventListener('click', () => switchConversation(c.id));
 
             const renameBtn = document.createElement('button');
@@ -85,6 +187,7 @@
         activeConvId = id;
         window.__activeConvId = id;
         history.replaceState(null, '', '?conv=' + id);
+        if (window.closePreview) window.closePreview(); // file/html viewer follows the old chat — close it
 
         convSelector.value = id;
         document.querySelectorAll('#convList li').forEach(li => {
@@ -99,7 +202,7 @@
         const res = await fetch('api/conversations.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken || '' },
-            body: JSON.stringify({})
+            body: JSON.stringify({ project_id: activeProjectId || 0 })
         });
         const data = await res.json();
         await loadConversations();
@@ -135,20 +238,150 @@
 
     async function loadMessages() {
         if (!activeConvId) return;
-        const res = await fetch('api/messages.php?conversation_id=' + activeConvId);
-        const msgs = await res.json();
+        messageList.classList.add('loading-state');
+        messageList.innerHTML = '<span class="spinner"></span> Loading messages...';
 
+        let msgs;
+        try {
+            const res = await fetch('api/messages.php?conversation_id=' + activeConvId);
+            msgs = await res.json();
+            if (!Array.isArray(msgs)) throw new Error(msgs && msgs.error ? msgs.error : 'Unexpected response');
+        } catch (e) {
+            messageList.classList.remove('loading-state');
+            messageList.innerHTML = '<div class="empty-msg" style="text-align:center;padding:2rem;">Could not load messages</div>';
+            return;
+        }
+
+        messageList.classList.remove('loading-state');
         messageList.innerHTML = '';
-        msgs.forEach(m => addMessage(m.role, m.content, false));
+        msgs.forEach(m => addMessage(m.role, m.content, m.created_at));
         scrollToBottom();
     }
 
-    function addMessage(role, content, save = false) {
+    /* ── Message rendering (bubble + timestamp, markdown for assistant) ── */
+
+    function formatTime(ts) {
+        const d = ts ? new Date(ts) : new Date();
+        if (isNaN(d.getTime())) return '';
+        const now = new Date();
+        const sameDay = d.toDateString() === now.toDateString();
+        const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return sameDay ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + time;
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Minimal safe markdown: input is HTML-escaped first, then formatted.
+    function renderMarkdown(text) {
+        let src = escapeHtml(text);
+        const codeBlocks = [];
+
+        // Fenced code blocks first, so nothing inside them is formatted
+        src = src.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+            codeBlocks.push('<pre><code>' + code.replace(/\n$/, '') + '</code></pre>');
+            return '\n\n\u0000' + (codeBlocks.length - 1) + '\u0000\n\n';
+        });
+
+        src = src
+            .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+            .replace(/^###### (.+)$/gm, '<h6>$1</h6>')
+            .replace(/^##### (.+)$/gm, '<h5>$1</h5>')
+            .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/^\s*([-*_]){3,}\s*$/gm, '<hr>')
+            .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+            .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+        // Lists: group consecutive bullet / numbered lines
+        src = src.replace(/(?:^[ \t]*[-*] .+\n?)+/gm, block => {
+            const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*[-*] /, '') + '</li>').join('');
+            return '<ul>' + items + '</ul>\n';
+        });
+        src = src.replace(/(?:^[ \t]*\d+\. .+\n?)+/gm, block => {
+            const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*\d+\. /, '') + '</li>').join('');
+            return '<ol>' + items + '</ol>\n';
+        });
+
+        // Paragraphs: split on blank lines; keep block-level HTML as-is
+        src = src.split(/\n{2,}/).map(part => {
+            const t = part.trim();
+            if (!t) return '';
+            if (/^<(h\d|ul|ol|pre|hr|blockquote)/.test(t) || /^\u0000\d+\u0000$/.test(t)) return t;
+            return '<p>' + t.replace(/\n/g, '<br>') + '</p>';
+        }).join('');
+
+        return src.replace(/\u0000(\d+)\u0000/g, (_, i) => codeBlocks[i]);
+    }
+
+    // Wrap each code block with a hover Copy button
+    function enhanceBubble(bubble) {
+        bubble.querySelectorAll('pre').forEach(pre => {
+            if (pre.parentElement.classList.contains('code-wrap')) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'code-wrap';
+            pre.parentNode.insertBefore(wrap, pre);
+            wrap.appendChild(pre);
+            const btn = document.createElement('button');
+            btn.className = 'code-copy-btn';
+            btn.type = 'button';
+            btn.textContent = 'Copy';
+            btn.addEventListener('click', () => window.copyToClipboard(pre.textContent, btn));
+            wrap.appendChild(btn);
+        });
+    }
+
+    // "✅ Content generated as artifact: **file.md**" acks render as a tidy chip
+    function artifactChipHtml(content) {
+        const m = content.match(/^✅ Content generated as artifact:\s*\*{0,2}(.+?)\*{0,2}$/);
+        if (!m) return null;
+        return '<span class="artifact-chip">'
+            + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">'
+            + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+            + '<span>Saved as artifact</span><strong>' + escapeHtml(m[1]) + '</strong></span>';
+    }
+
+    function addMessage(role, content, time) {
+        const row = document.createElement('div');
+        row.className = 'message-row ' + role;
+
         const div = document.createElement('div');
         div.className = 'message ' + role;
-        div.textContent = content;
-        messageList.appendChild(div);
+        if (role === 'assistant') {
+            div.classList.add('md-body');
+            const chip = artifactChipHtml(content);
+            div.innerHTML = chip !== null ? chip : renderMarkdown(content);
+            if (!chip) enhanceBubble(div);
+        } else {
+            div.textContent = content;
+        }
+        div.__raw = content;
+
+        const meta = document.createElement('div');
+        meta.className = 'msg-meta';
+
+        const timeEl = document.createElement('span');
+        timeEl.className = 'msg-time';
+        timeEl.textContent = formatTime(time);
+        meta.appendChild(timeEl);
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'msg-copy-btn';
+        copyBtn.type = 'button';
+        copyBtn.title = 'Copy message';
+        copyBtn.innerHTML = '⧉';
+        copyBtn.addEventListener('click', () => window.copyToClipboard(div.__raw || div.textContent, copyBtn));
+        meta.appendChild(copyBtn);
+
+        row.appendChild(div);
+        row.appendChild(meta);
+        messageList.appendChild(row);
         scrollToBottom();
+        return div;
     }
 
     function scrollToBottom() {
@@ -164,6 +397,7 @@
         if (!text || !activeConvId || streaming) return;
 
         chatInput.value = '';
+        chatInput.style.height = 'auto';
         streaming = true;
         sendBtn.disabled = true;
 
@@ -177,11 +411,11 @@
             references.push(match[1]);
         }
 
-        // Create assistant bubble for streaming
-        const bubble = document.createElement('div');
-        bubble.className = 'message assistant streaming';
+        // Create assistant bubble for streaming (rendered as plain text while
+        // tokens arrive; converted to markdown once the stream completes)
+        const bubble = addMessage('assistant', '', null);
+        bubble.classList.add('streaming');
         bubble.textContent = '▌';
-        messageList.appendChild(bubble);
         scrollToBottom();
 
         try {
@@ -224,13 +458,16 @@
                             scrollToBottom();
                         }
                         if (data.done) {
+                            if (data.title) loadConversations(); // conversation was auto-titled
                             if (data.saved && data.saved.length) {
-                                bubble.innerHTML = `✅ Content generated as artifact: <strong>${data.saved[0].filename}</strong>`;
+                                bubble.innerHTML = artifactChipHtml('✅ Content generated as artifact: ' + data.saved[0].filename);
                                 if (window.refreshSidebar) {
                                     window.refreshSidebar(activeConvId);
                                 }
                             } else {
-                                bubble.textContent = fullContent;
+                                bubble.innerHTML = renderMarkdown(fullContent);
+                                bubble.__raw = fullContent;
+                                enhanceBubble(bubble);
                             }
                             bubble.classList.remove('streaming');
                         }
@@ -444,6 +681,14 @@
 
     chatInput.addEventListener('input', updateAutocomplete);
 
+    // Auto-grow the composer with content (up to ~8 lines)
+    function autoGrow() {
+        chatInput.style.height = 'auto';
+        chatInput.style.height = Math.min(chatInput.scrollHeight, 200) + 'px';
+    }
+    chatInput.addEventListener('input', autoGrow);
+    autoGrow();
+
     chatInput.addEventListener('blur', () => setTimeout(() => autocomplete.classList.add('hidden'), 200));
 
     // Keep focus in the input when clicking a suggestion so blur doesn't hide the list mid-click
@@ -493,7 +738,18 @@
     (async function init() {
         await loadCsrfToken();
         await loadSkills();
+        await loadProjects();
         await loadConversations();
+        // If the server-picked conversation isn't in the active project, jump to one that is
+        const inProject = document.querySelector('#convList li[data-id="' + activeConvId + '"]');
+        if (!inProject) {
+            const firstId = convSelector.value ? parseInt(convSelector.value) : null;
+            if (firstId) {
+                await switchConversation(firstId);
+                return;
+            }
+        }
         if (activeConvId) await loadMessages();
+        if (window.refreshSidebar) window.refreshSidebar(activeConvId);
     })();
 })();

@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
 
-function llm_stream_chat(array $messages, callable $onChunk, string $provider, string $apiKey, string $baseUrl, string $model, float $temperature = 0.7, int $maxTokens = 2048): string
+function llm_stream_chat(array $messages, callable $onChunk, string $provider, string $apiKey, string $baseUrl, string $model, float $temperature = 0.4, int $maxTokens = 8192): string
 {
     $fullReply = '';
 
@@ -106,7 +106,7 @@ function llm_stream_chat(array $messages, callable $onChunk, string $provider, s
     return $fullReply;
 }
 
-function llm_chat(array $messages, string $provider, string $apiKey, string $baseUrl, string $model, float $temperature = 0.7, int $maxTokens = 2048): string
+function llm_chat(array $messages, string $provider, string $apiKey, string $baseUrl, string $model, float $temperature = 0.4, int $maxTokens = 8192): string
 {
     if ($provider === 'anthropic') {
         $systemPrompt = '';

@@ -24,13 +24,17 @@ switch ($method) {
         $input = json_decode(file_get_contents('php://input'), true);
         $label = trim($input['label'] ?? '');
         $provider = trim($input['provider'] ?? 'openai-compatible');
+        if (!in_array($provider, ['openai-compatible', 'anthropic'], true)) {
+            $provider = 'openai-compatible';
+        }
         $baseUrl = rtrim(trim($input['base_url'] ?? ''), '/');
         $model = trim($input['model'] ?? '');
         $key = $input['api_key'] ?? '';
 
-        if ($label === '' || $baseUrl === '' || $model === '' || $key === '') {
+        // Key may be empty for local servers (Ollama / LM Studio ignore auth)
+        if ($label === '' || $baseUrl === '' || $model === '') {
             http_response_code(400);
-            echo json_encode(['error' => 'All fields required']);
+            echo json_encode(['error' => 'Label, base URL and model are required']);
             exit;
         }
 

@@ -57,19 +57,42 @@ if (!empty($skillMatch[1])) {
 $stmt = $pdo->prepare('INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)');
 $stmt->execute([$convId, 'user', $message]);
 
-/* ── Build system prompt ── */
-$systemPrompt = 'You are a business analysis assistant that produces deliverable documents. '
-    . 'When the user types a /command, use the associated skill content (if provided below) to produce a complete markdown document. '
-    . 'Your response should be well-structured with headings, lists, and tables as appropriate. '
-    . 'Start directly with the document content — no greetings or explanations.';
-
-if ($skillName) {
-    $skillContent = github_fetch_skill_content($skillName);
-    if ($skillContent) {
-        $systemPrompt .= "\n\n--- ACTIVATED SKILL: /$skillName ---\n" . substr($skillContent, 0, 12000) . "\n--- END SKILL ---";
-        $systemPrompt .= "\n\nIMPORTANT: Output a deliverable markdown document. "
-            . "To save as an artifact, start with: SAVE_AS: {phase_folder}/{filename}.md";
+/* ── Auto-title new conversations from the first message (like claude.ai) ── */
+$stmt = $pdo->prepare('SELECT title, (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) AS msg_count FROM conversations WHERE id = ?');
+$stmt->execute([$convId, $convId]);
+$titleRow = $stmt->fetch();
+$newTitle = null;
+if ($titleRow && (int)$titleRow['msg_count'] <= 1 && in_array($titleRow['title'], ['New Chat', 'New Conversation', ''], true)) {
+    $newTitle = preg_replace('/^\/[a-zA-Z0-9_\-]+\s*/', '', $message); // drop leading /command
+    $newTitle = trim(preg_replace('/\s+/', ' ', $newTitle)) ?: ($skillName ? '/' . $skillName : 'New Chat');
+    if (mb_strlen($newTitle) > 48) {
+        $newTitle = mb_substr($newTitle, 0, 48) . '…';
     }
+    $stmt = $pdo->prepare('UPDATE conversations SET title = ? WHERE id = ?');
+    $stmt->execute([$newTitle, $convId]);
+}
+
+/* ── Build system prompt: strict document mode when a skill is active, general assistant otherwise ── */
+$skillContent = $skillName ? github_fetch_skill_content($skillName) : null;
+$skillMode = $skillName && $skillContent;
+
+if ($skillMode) {
+    $systemPrompt = "You are a senior business analyst producing a formal deliverable document.\n"
+        . "The skill below is your METHOD and OUTPUT SPECIFICATION — never copy or summarize the skill text itself. "
+        . "Apply it to the user's request to produce the deliverable it describes, about the user's subject matter."
+        . "\n\n--- ACTIVATED SKILL: /$skillName ---\n" . substr($skillContent, 0, 24000) . "\n--- END SKILL ---"
+        . "\n\nFINAL INSTRUCTIONS — follow all of these exactly:\n"
+        . "1. The FIRST line of your reply must be exactly: SAVE_AS: {short-kebab-case-name}.{ext} — nothing before it. Use .md unless the user asked for another format (.html, .yaml, .json, .csv, .xml, .txt).\n"
+        . "2. After that line, output the complete deliverable document in pure markdown, using the output structure, tables and formats the skill defines, filled with content about the USER'S request (not the skill's own text or examples).\n"
+        . "3. Where the skill defines workflow steps or question checklists, work through them applied to the user's input.\n"
+        . "4. If information is missing, keep the section and mark gaps explicitly (e.g. 'TBD — needs stakeholder input: owner of X') instead of inventing specifics.\n"
+        . "5. No greetings, no preamble, no closing remarks — the document only.";
+} else {
+    $systemPrompt = 'You are SkillApp, a capable, friendly AI assistant with business-analysis expertise. '
+        . 'Respond conversationally and helpfully, like a knowledgeable colleague. Use markdown formatting (headings, lists, tables, code blocks) when it improves clarity, and keep answers direct and well-organized. '
+        . 'Only produce a formal deliverable document when the user explicitly asks for one. '
+        . 'FILE SAVING RULE: only when the user explicitly asks you to create, save, generate or export a FILE, make the FIRST line of your reply exactly "SAVE_AS: {short-kebab-case-name}.{ext}" (choose the extension they asked for: .html, .yaml, .json, .csv, .xml, .txt or .md) followed by the file content. For any other message — questions, chit-chat, explanations, code help — never emit SAVE_AS and never create files. '
+        . 'The user can activate specialized BA skills by typing /commands (e.g. /user-story-standards); if their request clearly matches a skill workflow, you may mention that the skill exists.';
 }
 
 // File Reference Context
@@ -115,7 +138,14 @@ if ($activeKey) {
     $apiKey = $activeKey['api_key'];
     $baseUrl = rtrim($activeKey['base_url'], '/');
     $model = $activeKey['model'];
+} elseif (defined('DEFAULT_API_KEY') && DEFAULT_API_KEY !== '') {
+    // Generic server-wide fallback: works with any provider, not just one vendor
+    $provider = defined('DEFAULT_PROVIDER') ? DEFAULT_PROVIDER : 'openai-compatible';
+    $apiKey = DEFAULT_API_KEY;
+    $baseUrl = rtrim(preg_replace('#/(chat/completions|messages)/?$#', '', DEFAULT_API_URL), '/');
+    $model = DEFAULT_MODEL;
 } elseif (defined('GROQ_API_KEY') && GROQ_API_KEY !== '') {
+    // Legacy config constants, kept for backward compatibility
     $provider = 'openai-compatible';
     $apiKey = GROQ_API_KEY;
     // llm_client appends /chat/completions itself; strip it if present in the config URL
@@ -139,7 +169,7 @@ $stmt->execute([$convId, 'assistant', $fullReply]);
 $msgId = (int)$pdo->lastInsertId();
 
 /* ── Load skill folder mapping ── */
-$skillFolders = require_once __DIR__ . '/../config/skill_folders.php';
+$skillFolders = require __DIR__ . '/../config/skill_folders.php';
 $phaseFolder = $skillName && isset($skillFolders[$skillName]) ? $skillFolders[$skillName] : null;
 
 /* ── Check for SAVE_AS: artifact directive ── */
@@ -164,7 +194,7 @@ if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
         }
         $fileType = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-        if (in_array($fileType, ['md', 'pdf', 'docx', 'txt'], true)) {
+        if (in_array($fileType, ['md', 'pdf', 'docx', 'txt', 'html', 'yaml', 'yml', 'json', 'csv', 'xml'], true)) {
             if ($fileType === 'pdf') {
                 require_once __DIR__ . '/generate/to_pdf.php';
                 $blob = generate_pdf($content);
@@ -182,9 +212,9 @@ if (preg_match('/^SAVE_AS:\s*([^\r\n]+)\s*\r?\n([\s\S]*)$/m', $fullReply, $m)) {
     }
 }
 
-/* ── Also save implicitly for all responses ── */
+/* ── Implicit save only in skill mode: normal conversation stays chat ── */
 $isError = str_starts_with($fullReply, 'Error: API returned HTTP');
-if (!$isError && empty($saved) && strlen($fullReply) > 30) {
+if ($skillMode && !$isError && empty($saved) && strlen($fullReply) > 30) {
     $baseName = ($skillName ? $skillName : 'Response') . '_' . date('Ymd_His') . '.md';
     $fname = $phaseFolder ? $phaseFolder . '/' . $baseName : $baseName;
     $blob = $fullReply;
@@ -201,5 +231,5 @@ if (!empty($saved)) {
     $stmt->execute([$ackContent, $msgId]);
 }
 
-echo "data: " . json_encode(['done' => true, 'message_id' => $msgId, 'saved' => $saved, 'error' => $isError ? $fullReply : null]) . "\n\n";
+echo "data: " . json_encode(['done' => true, 'message_id' => $msgId, 'saved' => $saved, 'title' => $newTitle, 'error' => $isError ? $fullReply : null]) . "\n\n";
 ob_flush(); flush();
