@@ -10,7 +10,7 @@ require_login();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - SkillApp</title>
     <script>if(localStorage.getItem("daynight-theme")==="carbon"){document.documentElement.classList.add("carbon");}</script>
-    <link rel="stylesheet" href="assets/css/app.css">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= filemtime(__DIR__ . '/assets/css/app.css') ?>">
 </head>
 <body>
     <div class="app-container">
@@ -86,27 +86,47 @@ require_login();
                 <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:1rem;">Add New Key</h2>
                 <form id="keyForm" class="key-form">
                     <div class="form-group">
-                        <label class="form-label">Label</label>
-                        <input type="text" name="label" class="form-input" required placeholder="e.g. My Groq Key">
-                    </div>
-                    <div class="form-group">
                         <label class="form-label">Provider</label>
-                        <select name="provider" class="form-input">
-                            <option value="openai-compatible">OpenAI/Groq (OpenAI Compatible)</option>
+                        <select name="preset" id="presetSelect" class="form-input">
+                            <option value="openrouter">OpenRouter (aggregator — 400+ models)</option>
+                            <option value="openai">OpenAI</option>
                             <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="groq">Groq</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="mistral">Mistral AI</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="together">Together AI</option>
+                            <option value="fireworks">Fireworks AI</option>
+                            <option value="xai">xAI (Grok)</option>
+                            <option value="cerebras">Cerebras</option>
+                            <option value="perplexity">Perplexity</option>
+                            <option value="ollama">Ollama (local)</option>
+                            <option value="lmstudio">LM Studio (local)</option>
+                            <option value="custom">Custom (OpenAI compatible)</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Base URL</label>
-                        <input type="url" name="base_url" class="form-input" required placeholder="e.g. https://api.groq.com/openai/v1">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Model</label>
-                        <input type="text" name="model" class="form-input" required placeholder="e.g. llama-3.3-70b-versatile">
+                        <input type="url" name="base_url" id="baseUrlInput" class="form-input" required
+                               value="https://openrouter.ai/api/v1" placeholder="e.g. https://api.groq.com/openai/v1">
                     </div>
                     <div class="form-group">
                         <label class="form-label">API Key</label>
-                        <input type="password" name="api_key" class="form-input" required placeholder="sk-...">
+                        <input type="password" name="api_key" id="apiKeyInput" class="form-input" required placeholder="sk-...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Model</label>
+                        <div style="display:flex;gap:0.5rem;align-items:center;">
+                            <input type="text" name="model" id="modelInput" class="form-input" list="modelCatalog" required
+                                   placeholder="Pick from the catalogue or type a model id" style="flex:1">
+                            <button type="button" id="browseModelsBtn" class="btn-sm" style="width:auto;margin:0;white-space:nowrap">Browse models</button>
+                        </div>
+                        <datalist id="modelCatalog"></datalist>
+                        <p id="modelHint" style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.375rem;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Label</label>
+                        <input type="text" name="label" id="labelInput" class="form-input" required placeholder="e.g. My OpenRouter Key">
                     </div>
                     <button type="submit" class="btn btn-primary" style="width:auto;padding:0.75rem 2rem;align-self:flex-start">Add Key</button>
                 </form>
@@ -114,7 +134,7 @@ require_login();
         </main>
     </div>
 
-    <script src="assets/js/theme.js"></script>
+    <script src="assets/js/theme.js?v=<?= filemtime(__DIR__ . '/assets/js/theme.js') ?>"></script>
     <script>
     (async function() {
         const keyList = document.getElementById('keyList');
@@ -129,6 +149,7 @@ require_login();
         } catch(e) {}
 
         async function loadKeys() {
+            keyList.innerHTML = '<div class="loading-state"><span class="spinner"></span> Loading your keys...</div>';
             const res = await fetch(API);
             const keys = await res.json();
             keyList.innerHTML = '';
@@ -189,12 +210,85 @@ require_login();
             });
         }
 
+        /* ── Provider presets + model catalogue (OpenRouter-style) ── */
+        const PRESETS = {
+            openrouter: { base_url: 'https://openrouter.ai/api/v1', provider: 'openai-compatible', catalog: 'openrouter' },
+            openai:     { base_url: 'https://api.openai.com/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            anthropic:  { base_url: 'https://api.anthropic.com/v1', provider: 'anthropic', catalog: 'anthropic' },
+            groq:       { base_url: 'https://api.groq.com/openai/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            gemini:     { base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            mistral:    { base_url: 'https://api.mistral.ai/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            deepseek:   { base_url: 'https://api.deepseek.com/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            together:   { base_url: 'https://api.together.xyz/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            fireworks:  { base_url: 'https://api.fireworks.ai/inference/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            xai:        { base_url: 'https://api.x.ai/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            cerebras:   { base_url: 'https://api.cerebras.ai/v1', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            perplexity: { base_url: 'https://api.perplexity.ai', provider: 'openai-compatible', catalog: 'openai-compatible' },
+            ollama:     { base_url: 'http://localhost:11434/v1', provider: 'openai-compatible', catalog: 'openai-compatible', nokey: true },
+            lmstudio:   { base_url: 'http://localhost:1234/v1', provider: 'openai-compatible', catalog: 'openai-compatible', nokey: true },
+            custom:     { base_url: '', provider: 'openai-compatible', catalog: 'openai-compatible' },
+        };
+
+        const presetSelect = document.getElementById('presetSelect');
+        const baseUrlInput = document.getElementById('baseUrlInput');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const modelInput = document.getElementById('modelInput');
+        const modelCatalog = document.getElementById('modelCatalog');
+        const modelHint = document.getElementById('modelHint');
+        const browseBtn = document.getElementById('browseModelsBtn');
+
+        presetSelect.addEventListener('change', () => {
+            const p = PRESETS[presetSelect.value];
+            baseUrlInput.value = p.base_url;
+            // Local servers don't need a key; everyone else does
+            apiKeyInput.required = !p.nokey;
+            apiKeyInput.placeholder = p.nokey ? '(not needed for local servers)' : 'sk-...';
+            modelCatalog.innerHTML = '';
+            modelHint.textContent = '';
+        });
+
+        browseBtn.addEventListener('click', async () => {
+            const p = PRESETS[presetSelect.value];
+            browseBtn.disabled = true;
+            browseBtn.innerHTML = '<span class="spinner" style="width:12px;height:12px;vertical-align:middle"></span> Loading...';
+            modelHint.textContent = '';
+            try {
+                const res = await fetch('api/models_catalog.php', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','X-CSRF-Token':csrfToken},
+                    body: JSON.stringify({
+                        provider: p.catalog,
+                        base_url: baseUrlInput.value.trim(),
+                        api_key: apiKeyInput.value.trim(),
+                    })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    modelHint.textContent = data.error;
+                } else {
+                    modelCatalog.innerHTML = '';
+                    for (const m of data.models) {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        if (m.name && m.name !== m.id) opt.label = m.name;
+                        modelCatalog.appendChild(opt);
+                    }
+                    modelHint.textContent = data.models.length + ' models loaded — start typing in the Model field to search the catalogue.';
+                    modelInput.focus();
+                }
+            } catch (e) {
+                modelHint.textContent = 'Failed to load models: ' + e.message;
+            }
+            browseBtn.disabled = false;
+            browseBtn.textContent = 'Browse models';
+        });
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(form);
             const data = {
                 label: fd.get('label'),
-                provider: fd.get('provider'),
+                provider: PRESETS[presetSelect.value].provider,
                 base_url: fd.get('base_url'),
                 model: fd.get('model'),
                 api_key: fd.get('api_key'),

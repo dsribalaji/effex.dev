@@ -17,8 +17,16 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
     case 'GET':
-        $stmt = $pdo->prepare('SELECT id, title, active_skill, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC');
-        $stmt->execute([$userId]);
+        $projectId = (int)($_GET['project_id'] ?? 0);
+        if ($projectId > 0) {
+            require_once __DIR__ . '/../lib/projects.php';
+            require_project_owner_api($projectId, $userId);
+            $stmt = $pdo->prepare('SELECT id, title, active_skill, created_at FROM conversations WHERE user_id = ? AND project_id = ? ORDER BY created_at DESC');
+            $stmt->execute([$userId, $projectId]);
+        } else {
+            $stmt = $pdo->prepare('SELECT id, title, active_skill, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC');
+            $stmt->execute([$userId]);
+        }
         echo json_encode($stmt->fetchAll());
         break;
 
@@ -26,9 +34,17 @@ switch ($method) {
         $input = json_decode(file_get_contents('php://input'), true) ?: [];
         $title = trim($input['title'] ?? 'New Chat');
         $activeSkill = trim($input['active_skill'] ?? '');
+        $projectId = (int)($input['project_id'] ?? 0);
+        if ($projectId > 0) {
+            require_once __DIR__ . '/../lib/projects.php';
+            require_project_owner_api($projectId, $userId);
+        } else {
+            require_once __DIR__ . '/../lib/projects.php';
+            $projectId = project_ensure_default($userId);
+        }
 
-        $stmt = $pdo->prepare('INSERT INTO conversations (user_id, title, active_skill) VALUES (?, ?, ?)');
-        $stmt->execute([$userId, $title, $activeSkill ?: null]);
+        $stmt = $pdo->prepare('INSERT INTO conversations (user_id, title, active_skill, project_id) VALUES (?, ?, ?, ?)');
+        $stmt->execute([$userId, $title, $activeSkill ?: null, $projectId]);
 
         echo json_encode(['id' => (int)$pdo->lastInsertId(), 'title' => $title]);
         break;

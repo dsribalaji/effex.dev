@@ -4,6 +4,59 @@ require_once __DIR__ . '/../config/config.php';
 const GITHUB_CACHE_TTL = 600; // 10 minutes
 
 /**
+ * Local clone of the skills repo (optional). When SKILLS_LOCAL_PATH is defined
+ * and the directory exists, skills are read from disk instead of the GitHub API —
+ * edits to SKILL.md files show up immediately, ideal for testing/tuning prompts.
+ */
+function skills_local_dir(): ?string
+{
+    if (!defined('SKILLS_LOCAL_PATH') || SKILLS_LOCAL_PATH === '') return null;
+    $dir = rtrim(SKILLS_LOCAL_PATH, '/') . '/ba/.copilot/skills';
+    return is_dir($dir) ? $dir : null;
+}
+
+/**
+ * Find SKILL.md inside a skill folder regardless of filename casing (SKILL.md / SKILL.MD / skill.md).
+ */
+function skills_local_file(string $skillDir): ?string
+{
+    foreach (scandir($skillDir) ?: [] as $f) {
+        if (strcasecmp($f, 'SKILL.md') === 0 && is_file($skillDir . '/' . $f)) {
+            return $skillDir . '/' . $f;
+        }
+    }
+    return null;
+}
+
+function skills_local_list(): array
+{
+    $dir = skills_local_dir();
+    if ($dir === null) return [];
+
+    $skills = [];
+    foreach (scandir($dir) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..' || !is_dir($dir . '/' . $entry)) continue;
+        $skillFile = skills_local_file($dir . '/' . $entry);
+        if ($skillFile === null) continue;
+
+        $content = (string)file_get_contents($skillFile);
+        $name = $entry;
+        $description = '';
+        if (preg_match('/^---\s*\n(.+?)\n---/s', $content, $m)) {
+            if (preg_match('/^name:\s*(.+)$/m', $m[1], $nm)) $name = trim($nm[1]);
+            if (preg_match('/^description:\s*(.+)$/m', $m[1], $dm)) $description = trim($dm[1]);
+        }
+        $skills[] = [
+            'slug' => $entry,
+            'name' => $name,
+            'description' => $description,
+            'download_url' => '',
+        ];
+    }
+    return $skills;
+}
+
+/**
  * Fetch all skill folders from the GitHub repo.
  * Returns array of ['slug' => 'folder-name', 'name' => '...', 'description' => '...', 'download_url' => '...']
  *
@@ -13,6 +66,11 @@ const GITHUB_CACHE_TTL = 600; // 10 minutes
  */
 function github_list_skills(): array
 {
+    $local = skills_local_list();
+    if (!empty($local)) {
+        return $local;
+    }
+
     $cached = github_cache_read('skills_list', GITHUB_CACHE_TTL);
     if ($cached !== null) {
         return json_decode($cached, true) ?: [];
@@ -86,6 +144,14 @@ function github_fetch_skill_meta(string $slug): ?array
  */
 function github_fetch_skill_content(string $slug): ?string
 {
+    $localDir = skills_local_dir();
+    if ($localDir !== null && basename($slug) === $slug && is_dir($localDir . '/' . $slug)) {
+        $file = skills_local_file($localDir . '/' . $slug);
+        if ($file !== null) {
+            return (string)file_get_contents($file);
+        }
+    }
+
     $cacheKey = 'skill_content_' . $slug;
     $cached = github_cache_read($cacheKey, GITHUB_CACHE_TTL);
     if ($cached !== null) {

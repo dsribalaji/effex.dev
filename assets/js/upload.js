@@ -8,6 +8,10 @@
 
     uploadBtn.addEventListener('click', () => uploadInput.click());
 
+    // "+" button inside the chat composer opens the same file picker
+    const chatAttachBtn = document.getElementById('chatAttachBtn');
+    if (chatAttachBtn) chatAttachBtn.addEventListener('click', () => uploadInput.click());
+
     uploadInput.addEventListener('change', async () => {
         const files = uploadInput.files;
         if (!files || files.length === 0) return;
@@ -34,10 +38,10 @@
                 });
                 const data = await res.json();
                 if (data.error) {
-                    console.error('Upload failed:', data.error);
+                    alert('Upload failed for "' + file.name + '": ' + data.error);
                 }
             } catch (e) {
-                console.error('Upload error:', e);
+                alert('Upload error for "' + file.name + '": ' + e.message);
             }
         }
 

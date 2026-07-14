@@ -11,7 +11,7 @@ https://templatemo.com/tm-608-daynight-admin
 
 */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap');
 
 * {
     margin: 0;
@@ -19,46 +19,51 @@ https://templatemo.com/tm-608-daynight-admin
     box-sizing: border-box;
 }
 
-/* ===== CSS Variables - Snow Edition (Default) ===== */
+/* ===== CSS Variables - Snow Edition (Claude-inspired warm light) ===== */
 :root {
     --bg-primary: #FFFFFF;
-    --bg-secondary: #F8FAFC;
-    --bg-surface: #F1F5F9;
-    --border-color: #E2E8F0;
-    --text-primary: #1E293B;
-    --text-secondary: #64748B;
-    --accent: #38BDF8;
-    --accent-hover: #0EA5E9;
-    --accent-light: rgba(56, 189, 248, 0.1);
+    --bg-secondary: #FAF9F5;
+    --bg-surface: #F0EEE6;
+    --border-color: #E5E1D8;
+    --text-primary: #2B2A26;
+    --text-secondary: #73716B;
+    --accent: #C15F3C;
+    --accent-hover: #A94F30;
+    --accent-light: rgba(193, 95, 60, 0.10);
     --success: #22C55E;
     --warning: #F59E0B;
-    --danger: #EF4444;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --danger: #DC5A50;
+    --shadow: 0 1px 3px rgba(60, 50, 40, 0.06);
+    --shadow-md: 0 4px 14px rgba(60, 50, 40, 0.08);
     --transition: all 0.2s ease;
+    --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
 }
 
-/* ===== Carbon Edition (Dark Mode) ===== */
+/* ===== Carbon Edition (Claude-inspired warm dark) ===== */
 /* Applied to html for instant load, and body for JS toggle */
 html.carbon,
 body.carbon {
-    --bg-primary: #0F0F0F;
-    --bg-secondary: #171717;
-    --bg-surface: #1F1F1F;
-    --border-color: #2E2E2E;
-    --text-primary: #F5F5F5;
-    --text-secondary: #A3A3A3;
-    --accent: #38BDF8;
-    --accent-hover: #7DD3FC;
-    --accent-light: rgba(56, 189, 248, 0.15);
+    --bg-primary: #2B2A26;
+    --bg-secondary: #262521;
+    --bg-surface: #33322D;
+    --border-color: #43423C;
+    --text-primary: #EDEBE4;
+    --text-secondary: #A5A399;
+    --accent: #D97757;
+    --accent-hover: #E38A6D;
+    --accent-light: rgba(217, 119, 87, 0.16);
+    --danger: #E8695E;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
-/* Ensure html inherits theme background for instant paint */
+/* Ensure html inherits theme background for instant paint;
+   color-scheme makes native controls (selects, scrollbars) follow the theme */
 html {
     background: var(--bg-secondary);
+    color-scheme: light;
 }
+html.carbon, body.carbon { color-scheme: dark; }
 
 /* ===== Base Styles ===== */
 html {
@@ -1898,9 +1903,8 @@ tr:hover td {
 .conv-item:hover .conv-rename, .conv-item:hover .conv-del { opacity: 1; }
 .conv-item .conv-rename:hover { background: var(--accent-light); color: var(--accent); }
 .conv-item .conv-del:hover { background: rgba(239,68,68,0.1); color: var(--danger); }
-.conv-item.active .conv-rename, .conv-item.active .conv-del { color: rgba(255,255,255,0.6); }
-.conv-item.active .conv-rename:hover { background: rgba(56,189,248,0.2); color: #fff; }
-.conv-item.active .conv-del:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.conv-item.active .conv-rename, .conv-item.active .conv-del { color: var(--accent); }
+.conv-item.active .conv-rename:hover, .conv-item.active .conv-del:hover { background: var(--accent-light); color: var(--accent-hover); }
 
 .btn-sm {
     background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary);
@@ -1911,33 +1915,101 @@ tr:hover td {
 
 #chatArea { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
+/* Reading column: messages sit in a centered, comfortably narrow column */
 #messageList {
-    flex: 1; overflow-y: auto; padding: 1.5rem;
-    display: flex; flex-direction: column; gap: 1rem;
+    flex: 1; overflow-y: auto;
+    padding: 2rem 1.5rem 0.5rem;
+    display: flex; flex-direction: column; gap: 1.75rem;
 }
-.message { max-width: 80%; padding: 0.75rem 1rem; border-radius: 8px; line-height: 1.6; font-size: 0.9375rem; white-space: pre-wrap; }
-.message.user { align-self: flex-end; background: var(--accent); color: #fff; }
-.message.assistant { align-self: flex-start; background: var(--bg-primary); border: 1px solid var(--border-color); }
-.message.streaming { border-color: var(--accent); }
-.message.system { align-self: center; font-style: italic; color: var(--text-secondary); font-size: 0.8125rem; }
+.message-row { width: 100%; max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; }
+.message-row.user { align-items: flex-end; }
+.message-row.assistant { align-items: flex-start; }
+.message-row.system { align-items: center; }
 
-#inputArea {
-    display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--border-color);
-    background: var(--bg-primary);
+.message { line-height: 1.7; font-size: 0.9375rem; overflow-wrap: break-word; min-width: 0; max-width: 100%; }
+.message.user {
+    max-width: 85%;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    padding: 0.75rem 1.125rem;
+    border-radius: 16px 16px 4px 16px;
+    white-space: pre-wrap;
 }
-.input-wrapper { flex: 1; position: relative; }
-#chatInput {
-    width: 100%; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary);
-    padding: 0.75rem; border-radius: 8px; font-size: 0.9375rem; resize: none; font-family: inherit; line-height: 1.5;
+.message.assistant { background: transparent; border: none; padding: 0; }
+.message.assistant.streaming { white-space: pre-wrap; }
+.message.system { font-style: italic; color: var(--text-secondary); font-size: 0.8125rem; }
+
+.msg-time {
+    margin-top: 0.375rem; font-size: 0.6875rem;
+    color: var(--text-secondary); opacity: 0.75; user-select: none;
+}
+
+/* Markdown inside assistant messages */
+.md-body h1 { font-size: 1.375rem; margin: 1rem 0 0.5rem; }
+.md-body h2 { font-size: 1.1875rem; margin: 1rem 0 0.5rem; }
+.md-body h3 { font-size: 1.0625rem; margin: 0.875rem 0 0.375rem; }
+.md-body h4, .md-body h5, .md-body h6 { font-size: 0.9375rem; margin: 0.75rem 0 0.25rem; }
+.md-body h1:first-child, .md-body h2:first-child, .md-body h3:first-child { margin-top: 0; }
+.md-body p { margin: 0 0 0.875rem; }
+.md-body p:last-child { margin-bottom: 0; }
+.md-body ul, .md-body ol { margin: 0 0 0.875rem 1.375rem; }
+.md-body li { margin-bottom: 0.3125rem; }
+.md-body code {
+    background: var(--bg-surface); border: 1px solid var(--border-color);
+    padding: 0.0625rem 0.375rem; border-radius: 5px; font-size: 0.8125rem;
+}
+.md-body pre {
+    background: var(--bg-surface); border: 1px solid var(--border-color);
+    padding: 0.875rem 1rem; border-radius: 10px; overflow-x: auto;
+    margin: 0 0 0.875rem; font-size: 0.8125rem; line-height: 1.6;
+}
+.md-body pre code { background: none; border: none; padding: 0; font-size: inherit; }
+.md-body a { color: var(--accent); }
+.md-body hr { border: none; border-top: 1px solid var(--border-color); margin: 1rem 0; }
+.md-body strong { font-weight: 600; }
+
+/* Composer: one rounded surface with attach (+), textarea and send (↑) inside */
+#inputArea {
+    display: flex;
+    width: 100%; max-width: 47.5rem; margin: 0 auto;
+    padding: 0.75rem 1.5rem 1.25rem;
+    background: transparent;
+}
+.input-wrapper.composer {
+    flex: 1; position: relative; min-width: 0;
+    display: flex; align-items: flex-end; gap: 0.375rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 0.5rem 0.5rem 0.5rem 0.5625rem;
+    box-shadow: 0 2px 8px rgba(60, 50, 40, 0.06);
     transition: var(--transition);
 }
-#chatInput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.input-wrapper.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+#chatInput {
+    flex: 1; min-width: 0; background: transparent; border: none; color: var(--text-primary);
+    padding: 0.4375rem 0.25rem; font-size: 0.9375rem; resize: none; font-family: inherit; line-height: 1.5;
+    max-height: 200px; overflow-y: auto;
+}
+#chatInput:focus { outline: none; }
 #chatInput::placeholder { color: var(--text-secondary); }
 
-.btn-primary.send-btn {
-    width: 44px; height: 44px; padding: 0; display: flex;
-    align-items: center; justify-content: center; font-size: 1.125rem; align-self: flex-end;
+.composer-btn {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: transparent; border: none; color: var(--text-secondary); cursor: pointer;
+    transition: var(--transition);
 }
+.composer-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+
+.composer-send {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent); border: none; color: #fff; cursor: pointer;
+    transition: var(--transition);
+}
+.composer-send:hover { background: var(--accent-hover); }
+.composer-send:disabled { opacity: 0.45; cursor: default; }
 
 /* Autocomplete dropdown */
 .autocomplete-dropdown {
@@ -2048,11 +2120,7 @@ tr:hover td {
 /* Scrollable message content */
 .message-content-wrapper { max-height: 60vh; overflow-y: auto; }
 
-/* Carbon theme overrides for chat dark mode */
-body.carbon .message.assistant { background: var(--bg-surface); }
-body.carbon .conv-select { background: var(--bg-surface); color: var(--text-primary); }
-body.carbon #chatInput { background: var(--bg-surface); }
-body.carbon #inputArea { background: var(--bg-surface); }
+/* (legacy carbon overrides removed — CSS variables handle both themes now) */
 
 /* Artifact folder tree */
 .artifact-folder { margin-bottom: 0.25rem; }
@@ -2092,7 +2160,10 @@ body.carbon #inputArea { background: var(--bg-surface); }
     min-width: 300px;
     max-width: 360px;
 }
-#previewPanel.open + #chatArea .message { max-width: 100%; }
+#previewPanel.open + #chatArea .message,
+#previewPanel.open + #chatArea .message-row { max-width: 100%; }
+#previewPanel.open + #chatArea #messageList { padding: 1.25rem 1rem 0.5rem; }
+#previewPanel.open + #chatArea #inputArea { padding: 0.5rem 1rem 1rem; }
 .preview-panel-tab {
     display: flex;
     align-items: center;
@@ -2134,3 +2205,152 @@ body.carbon #inputArea { background: var(--bg-surface); }
     #previewPanel.open { position: absolute; right: 0; top: 0; bottom: 0; width: 100%; min-width: 0; z-index: 50; }
     #main { position: relative; }
 }
+
+/* ── Loading spinner ── */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent, #4f7cff);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+}
+.loading-state .spinner {
+    width: 16px;
+    height: 16px;
+}
+#messageList.loading-state {
+    height: 100%;
+    flex-direction: column;
+}
+#messageList.loading-state .spinner {
+    width: 22px;
+    height: 22px;
+}
+
+/* ═══════════ Claude-style redesign additions ═══════════ */
+
+/* One continuous warm surface: sidebar and conversation share the cream tone,
+   so bubbles and composer blend instead of sitting on stark white */
+#sidebar { background: var(--bg-secondary); }
+#chatArea { background: var(--bg-secondary); }
+
+/* Serif display type for headings, like claude.ai */
+.md-body h1, .md-body h2, .preview-body h1, .preview-body h2,
+.auth-card h1, .main-content h1 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* Message meta row: timestamp + copy, only visible on hover */
+.msg-meta {
+    display: flex; align-items: center; gap: 0.375rem;
+    margin-top: 0.3125rem;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.message-row:hover .msg-meta { opacity: 1; }
+.msg-meta .msg-time { margin-top: 0; }
+.msg-copy-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-secondary); font-size: 0.8125rem;
+    padding: 0 0.25rem; border-radius: 4px; line-height: 1;
+}
+.msg-copy-btn:hover { color: var(--text-primary); background: var(--bg-surface); }
+.msg-copy-btn.copied { color: var(--success); }
+
+/* Code blocks with hover copy button */
+.code-wrap { position: relative; }
+.code-wrap .code-copy-btn {
+    position: absolute; top: 0.4375rem; right: 0.4375rem;
+    font-size: 0.6875rem; padding: 0.1875rem 0.5rem;
+    background: var(--bg-primary); border: 1px solid var(--border-color);
+    border-radius: 6px; color: var(--text-secondary); cursor: pointer;
+    opacity: 0; transition: opacity 0.15s ease;
+}
+.code-wrap:hover .code-copy-btn { opacity: 1; }
+.code-wrap .code-copy-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+.code-wrap .code-copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+/* Source-code view in the doc panel (html/yaml/json/...) */
+.preview-body pre.code-view {
+    background: var(--bg-surface); border: 1px solid var(--border-color);
+    border-radius: 10px; padding: 1rem 1.125rem;
+    font-size: 0.8125rem; line-height: 1.65;
+    white-space: pre; overflow: auto;
+}
+
+/* Softer, larger radii on core surfaces */
+.card { border-radius: 14px; }
+.btn-primary { background: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.login-title, .preview-panel-title { font-family: var(--font-serif); }
+.login-card { border-radius: 16px; }
+
+/* Sidebar buttons with icons */
+.btn-sm { display: inline-flex; align-items: center; justify-content: center; gap: 0.4375rem; }
+.btn-sm svg { flex-shrink: 0; }
+
+/* Hamburger: proper hit-area and vertical centering in the navbar */
+.mobile-menu-btn {
+    align-items: center; justify-content: center;
+    width: 38px; height: 38px; padding: 0;
+    border-radius: 8px; flex-shrink: 0;
+    transition: var(--transition);
+}
+.mobile-menu-btn:hover { background: var(--bg-surface); }
+.mobile-menu-btn svg { width: 20px; height: 20px; display: block; }
+
+/* Navbar: tighter left cluster (the 3rem gap pushed the logo away from the hamburger) */
+.nav-left { gap: 1rem; }
+.nav-left .nav-menu { margin-left: 1.25rem; }
+.nav-container { gap: 1rem; }
+.nav-container > div { min-width: 0; }
+
+/* Artifact-saved acknowledgement chip (replaces the raw text strip) */
+.artifact-chip {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: var(--bg-primary); border: 1px solid var(--border-color);
+    border-radius: 12px; padding: 0.5625rem 0.875rem;
+    font-size: 0.8438rem; color: var(--text-secondary);
+    box-shadow: var(--shadow);
+}
+.artifact-chip svg { color: var(--accent); flex-shrink: 0; }
+.artifact-chip strong { color: var(--text-primary); font-weight: 600; word-break: break-all; }
+
+/* Navbar: divider between logo and conversation controls; even icon buttons */
+.nav-divider { width: 1px; height: 22px; background: var(--border-color); flex-shrink: 0; }
+.nav-icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; padding: 0; border-radius: 8px; flex-shrink: 0;
+}
+.conv-select { max-width: 260px; }
+#sidebarToggle { display: flex; }
+@media (max-width: 900px) {
+    .conv-select { max-width: 150px; }
+    .user-name { display: none; }
+}
+
+/* Projects + export + collapsible folders + viewer toggle */
+.project-row { display: flex; gap: 0.375rem; align-items: center; }
+.project-row .nav-icon-btn { color: var(--text-secondary); border: 1px solid var(--border-color); background: var(--bg-primary); }
+.project-row .nav-icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.sidebar-footer { margin-top: auto; border-bottom: none; border-top: 1px solid var(--border-color); }
+.folder-chevron { font-size: 0.625rem; color: var(--text-secondary); transition: transform 0.15s ease; }
+.artifact-folder.collapsed .folder-chevron { transform: rotate(-90deg); }
+.artifact-folder.collapsed .folder-files { display: none; }
+.preview-panel-btn.active { background: var(--accent-light); color: var(--accent); }

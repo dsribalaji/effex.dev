@@ -24,14 +24,14 @@ if (!$activeConv) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkillApp</title>
     <script>if(localStorage.getItem("daynight-theme")==="carbon"){document.documentElement.classList.add("carbon");}</script>
-    <link rel="stylesheet" href="assets/css/app.css">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= filemtime(__DIR__ . '/assets/css/app.css') ?>">
 </head>
 <body>
     <div id="app">
         <nav class="top-nav" style="position:static;flex-shrink:0">
             <div class="nav-container">
                 <div class="nav-left">
-                    <button id="sidebarToggle" class="mobile-menu-btn" style="display:flex" title="Toggle sidebar">
+                    <button id="sidebarToggle" class="mobile-menu-btn" title="Toggle sidebar">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="3" y1="6" x2="21" y2="6"/>
                             <line x1="3" y1="12" x2="21" y2="12"/>
@@ -46,14 +46,12 @@ if (!$activeConv) {
                         </div>
                         SkillApp
                     </a>
-                    <div class="nav-menu" style="display:none"></div>
-                </div>
-                    <div style="display:flex;align-items:center;gap:0.75rem">
+                    <div class="nav-divider"></div>
                     <select id="convSelector" class="conv-select"></select>
-                    <button id="clearChatBtn" class="btn btn-ghost" title="Clear chat" style="padding:0.375rem">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                            <path d="M18 6 6 18"/>
-                            <path d="m6 6 12 12"/>
+                    <button id="clearChatBtn" class="btn btn-ghost nav-icon-btn" title="Clear chat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                         </svg>
                     </button>
                 </div>
@@ -102,9 +100,27 @@ if (!$activeConv) {
         <div id="main">
             <aside id="sidebar">
                 <div class="sidebar-section">
+                    <h3>Project</h3>
+                    <div class="project-row">
+                        <select id="projectSelector" class="conv-select" style="min-width:0;flex:1"></select>
+                        <button id="newProjectBtn" class="nav-icon-btn" title="New project">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-section">
                     <h3>Conversations</h3>
                     <ul id="convList"></ul>
-                    <button id="newConvBtn" class="btn-sm">+ New Chat</button>
+                    <button id="newConvBtn" class="btn-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                        New Chat
+                    </button>
                 </div>
                 <div class="sidebar-section">
                     <h3>Artifacts</h3>
@@ -114,9 +130,24 @@ if (!$activeConv) {
                     <h3>Attachments</h3>
                     <div id="uploadArea">
                         <input type="file" id="uploadInput" multiple hidden>
-                        <button id="uploadBtn" class="btn-sm">+ Attach files</button>
+                        <button id="uploadBtn" class="btn-sm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                            </svg>
+                            Attach files
+                        </button>
                     </div>
                     <ul id="uploadList"><li class="empty-msg">No uploads yet</li></ul>
+                </div>
+                <div class="sidebar-section sidebar-footer">
+                    <button id="exportProjectBtn" class="btn-sm" title="Download all project artifacts as zip">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export project (.zip)
+                    </button>
                 </div>
             </aside>
 
@@ -124,6 +155,18 @@ if (!$activeConv) {
                 <div class="preview-panel-tab">
                     <span class="preview-panel-icon" id="previewPanelIcon">📄</span>
                     <span class="preview-panel-title" id="previewPanelTitle"></span>
+                    <button class="preview-panel-btn" id="previewPanelToggle" title="Toggle preview / code" style="display:none">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="preview-panel-btn" id="previewPanelCopy" title="Copy content">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                            <rect x="9" y="9" width="13" height="13" rx="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
                     <a class="preview-panel-btn" id="previewPanelDownload" title="Download" target="_blank">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -144,27 +187,33 @@ if (!$activeConv) {
             <div id="chatArea">
                 <div id="messageList"></div>
                 <div id="inputArea">
-                    <div class="input-wrapper">
-                        <textarea id="chatInput" rows="3" placeholder="Type / for skills, or ask a question..."></textarea>
+                    <div class="input-wrapper composer">
+                        <button id="chatAttachBtn" class="composer-btn" title="Attach files" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                        <textarea id="chatInput" rows="1" placeholder="Type / for skills, or ask a question..."></textarea>
+                        <button id="sendBtn" class="composer-send" title="Send" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+                                <line x1="12" y1="19" x2="12" y2="5"/>
+                                <polyline points="5 12 12 5 19 12"/>
+                            </svg>
+                        </button>
                         <div id="autocomplete" class="autocomplete-dropdown hidden"></div>
                     </div>
-                    <button id="sendBtn" class="btn btn-primary send-btn" title="Send">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="22" y1="2" x2="11" y2="13"/>
-                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                        </svg>
-                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="assets/js/theme.js"></script>
+    <script src="assets/js/theme.js?v=<?= filemtime(__DIR__ . '/assets/js/theme.js') ?>"></script>
     <script>
     const CONV_ID = <?= json_encode((int)$activeConv['id']) ?>;
     </script>
-    <script src="assets/js/chat.js"></script>
-    <script src="assets/js/sidebar.js"></script>
-    <script src="assets/js/upload.js"></script>
+    <script src="assets/js/chat.js?v=<?= filemtime(__DIR__ . '/assets/js/chat.js') ?>"></script>
+    <script src="assets/js/sidebar.js?v=<?= filemtime(__DIR__ . '/assets/js/sidebar.js') ?>"></script>
+    <script src="assets/js/upload.js?v=<?= filemtime(__DIR__ . '/assets/js/upload.js') ?>"></script>
 </body>
 </html>

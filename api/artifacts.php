@@ -31,6 +31,22 @@ switch ($action) {
         echo json_encode($stmt->fetchAll());
         break;
 
+    /* ── List all artifacts in a project (across its conversations) ── */
+    case 'list_project':
+        require_once __DIR__ . '/../lib/projects.php';
+        $projectId = (int)($_GET['project_id'] ?? 0);
+        require_project_owner_api($projectId, $userId);
+
+        $stmt = $pdo->prepare(
+            'SELECT a.id, a.filename, a.file_type, a.size_bytes, a.created_at FROM artifacts a
+             JOIN conversations c ON c.id = a.conversation_id
+             WHERE c.project_id = ? AND a.user_id = ?
+             ORDER BY a.created_at DESC'
+        );
+        $stmt->execute([$projectId, $userId]);
+        echo json_encode($stmt->fetchAll());
+        break;
+
     /* ── Preview artifact (rendered HTML) ── */
     case 'preview':
         $id = (int)($_GET['id'] ?? 0);
@@ -48,12 +64,15 @@ switch ($action) {
         if ($type === 'md') {
             require_once __DIR__ . '/../lib/markdown.php';
             $html = markdown_to_html($content);
-            echo json_encode(['type' => 'html', 'html' => $html, 'name' => $name]);
+            echo json_encode(['type' => 'html', 'html' => $html, 'name' => $name, 'source' => $content]);
         } elseif ($type === 'pdf') {
             echo json_encode(['type' => 'pdf', 'url' => 'api/artifacts.php?action=download&id=' . $id, 'name' => $name]);
         } elseif ($type === 'docx') {
             $text = strip_tags($content);
             echo json_encode(['type' => 'text', 'content' => $text, 'name' => $name]);
+        } elseif (in_array($type, ['html', 'yaml', 'yml', 'json', 'csv', 'xml'], true)) {
+            // Source-code view (with copy button) rather than rendering
+            echo json_encode(['type' => 'code', 'content' => $content, 'lang' => $type, 'name' => $name]);
         } else {
             echo json_encode(['type' => 'text', 'content' => $content, 'name' => $name]);
         }
@@ -86,7 +105,7 @@ switch ($action) {
         $content = $input['content'] ?? '';
         $fileType = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-        if (!in_array($fileType, ['md', 'pdf', 'docx', 'txt'], true)) {
+        if (!in_array($fileType, ['md', 'pdf', 'docx', 'txt', 'html', 'yaml', 'yml', 'json', 'csv', 'xml'], true)) {
             echo json_encode(['error' => 'Unsupported file type: ' . $fileType]);
             exit;
         }

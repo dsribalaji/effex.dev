@@ -13,12 +13,20 @@
 
     async function loadArtifacts() {
         const list = document.getElementById('artifactList');
-        if (!list || !currentConvId) return;
+        if (!list) return;
 
+        // Artifacts are project-wide (all chats in the active project), like claude.ai projects
+        const projectId = window.__activeProjectId || 0;
+        const url = projectId
+            ? 'api/artifacts.php?action=list_project&project_id=' + projectId
+            : 'api/artifacts.php?action=list&conversation_id=' + currentConvId;
+        if (!projectId && !currentConvId) return;
+
+        list.innerHTML = '<li class="loading-state"><span class="spinner"></span> Loading...</li>';
         try {
-            const res = await fetch('api/artifacts.php?action=list&conversation_id=' + currentConvId);
+            const res = await fetch(url);
             const items = await res.json();
-            renderArtifactTree(list, items);
+            renderArtifactTree(list, Array.isArray(items) ? items : []);
         } catch (e) {
             list.innerHTML = '<li class="empty-msg">Error loading artifacts</li>';
         }
@@ -28,6 +36,7 @@
         const list = document.getElementById('uploadList');
         if (!list || !currentConvId) return;
 
+        list.innerHTML = '<li class="loading-state"><span class="spinner"></span> Loading...</li>';
         try {
             const res = await fetch('api/uploads.php?action=list&conversation_id=' + currentConvId);
             const items = await res.json();
@@ -73,17 +82,21 @@
             const folderFiles = folders[folder];
             
             if (folder !== 'root') {
-                // Create folder header
+                // Collapsible folder
                 const folderLi = document.createElement('li');
                 folderLi.className = 'artifact-folder';
                 folderLi.innerHTML = `
                     <span class="folder-header">
+                        <span class="folder-chevron">▾</span>
                         <span class="folder-icon">📁</span>
                         <span class="folder-name">${escapeHtml(folder)}</span>
                         <span class="folder-count">(${folderFiles.length})</span>
                     </span>
                     <ul class="folder-files"></ul>
                 `;
+                folderLi.querySelector('.folder-header').addEventListener('click', () => {
+                    folderLi.classList.toggle('collapsed');
+                });
                 const filesUl = folderLi.querySelector('.folder-files');
                 folderFiles.forEach(file => renderFileItem(filesUl, file, 'artifact'));
                 ul.appendChild(folderLi);
@@ -187,11 +200,40 @@
     const previewIcon = document.getElementById('previewPanelIcon');
     const previewBody = document.getElementById('previewPanelBody');
     const previewDownload = document.getElementById('previewPanelDownload');
+    const previewCopyBtn = document.getElementById('previewPanelCopy');
+    const previewToggleBtn = document.getElementById('previewPanelToggle');
     const previewCloseBtn = document.getElementById('previewPanelClose');
 
     let currentPreviewKey = null;
+    let currentPreviewText = null; // raw text for the header copy button
+    let htmlViewMode = 'preview';  // 'preview' | 'code' for html artifacts
 
     if (previewCloseBtn) previewCloseBtn.addEventListener('click', closePreview);
+    if (previewToggleBtn) previewToggleBtn.addEventListener('click', () => {
+        htmlViewMode = htmlViewMode === 'preview' ? 'code' : 'preview';
+        renderHtmlView();
+    });
+
+    function renderHtmlView() {
+        if (currentPreviewText === null) return;
+        if (htmlViewMode === 'preview') {
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('sandbox', 'allow-scripts');
+            iframe.style.cssText = 'width:100%;height:100%;border:none;background:#fff;';
+            iframe.srcdoc = currentPreviewText;
+            previewBody.innerHTML = '';
+            previewBody.appendChild(iframe);
+            previewToggleBtn.title = 'View source code';
+        } else {
+            previewBody.innerHTML = '<pre class="code-view"><code>' + escapeHtml(currentPreviewText) + '</code></pre>';
+            previewToggleBtn.title = 'View rendered preview';
+        }
+        previewToggleBtn.classList.toggle('active', htmlViewMode === 'code');
+    }
+    if (previewCopyBtn) previewCopyBtn.addEventListener('click', () => {
+        if (currentPreviewText === null) return;
+        window.copyToClipboard(currentPreviewText, previewCopyBtn);
+    });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closePreview();
     });
@@ -228,16 +270,31 @@
             previewTitle.title = data.name || '';
             previewIcon.textContent = typeIcon(data.type === 'html' ? 'md' : data.type);
 
+            currentPreviewText = null;
+            let isHtmlFile = false;
             if (data.type === 'html') {
                 previewBody.innerHTML = data.html;
+                currentPreviewText = data.source || previewBody.textContent;
             } else if (data.type === 'pdf') {
                 previewBody.innerHTML = '<iframe src="' + escapeHtml(data.url) + '" style="width:100%;height:100%;border:none;"></iframe>';
             } else if (data.type === 'image') {
                 previewBody.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;"><img src="' + escapeHtml(data.url) + '" style="max-width:100%;max-height:100%;object-fit:contain;"></div>';
+            } else if (data.type === 'code') {
+                currentPreviewText = data.content || '';
+                isHtmlFile = data.lang === 'html';
+                if (isHtmlFile) {
+                    htmlViewMode = 'preview'; // rendered first, toggle to source
+                    renderHtmlView();
+                } else {
+                    previewBody.innerHTML = '<pre class="code-view"><code>' + escapeHtml(currentPreviewText) + '</code></pre>';
+                }
             } else if (data.type === 'text') {
                 previewBody.innerHTML = '<pre>' + escapeHtml(data.content || '') + '</pre>';
+                currentPreviewText = data.content || '';
             }
 
+            if (previewToggleBtn) previewToggleBtn.style.display = isHtmlFile ? 'inline-flex' : 'none';
+            if (previewCopyBtn) previewCopyBtn.style.display = currentPreviewText !== null ? 'inline-flex' : 'none';
             previewDownload.href = downloadUrl || data.url || '#';
             previewDownload.style.display = (downloadUrl || data.url) ? 'inline-flex' : 'none';
 
@@ -252,6 +309,7 @@
         if (previewPanel) previewPanel.classList.remove('open');
         currentPreviewKey = null;
     }
+    window.closePreview = closePreview;
 
     /* ── Delete ── */
 
@@ -297,6 +355,9 @@
         if (t === 'pdf') return '📄';
         if (t === 'docx') return '📃';
         if (t === 'txt') return '📄';
+        if (t === 'html' || t === 'xml') return '🌐';
+        if (t === 'yaml' || t === 'yml' || t === 'json') return '⚙️';
+        if (t === 'csv') return '📊';
         if (t.includes('pdf')) return '📄';
         if (t.includes('word') || t.includes('docx')) return '📃';
         return '📎';
