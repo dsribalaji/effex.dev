@@ -1,4 +1,24 @@
-config/config.php
-config/.env
-*.log
+# SkillApp .gitignore
+# OS
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Runtime
+config/config.php
+*.log
+/tmp/
+
+# Backups
+*.bak
+*.backup
+
+# XAMPP symlink (not part of repo)
+/opt/lampp/htdocs/effex

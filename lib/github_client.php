@@ -11,7 +11,8 @@ const GITHUB_CACHE_TTL = 600; // 10 minutes
 function skills_local_dir(): ?string
 {
     if (!defined('SKILLS_LOCAL_PATH') || SKILLS_LOCAL_PATH === '') return null;
-    $dir = rtrim(SKILLS_LOCAL_PATH, '/') . '/ba/.copilot/skills';
+    $rolePath = $_SESSION['github_path'] ?? 'ba/.copilot/skills';
+    $dir = rtrim(SKILLS_LOCAL_PATH, '/') . '/' . $rolePath;
     return is_dir($dir) ? $dir : null;
 }
 
@@ -76,8 +77,9 @@ function github_list_skills(): array
         return json_decode($cached, true) ?: [];
     }
 
-    // Currently hardcoded to fetch from the 'ba' role folder as requested
-    $url = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/ba/.copilot/skills';
+    // Use the user's role github_path, fall back to 'ba' role
+    $rolePath = $_SESSION['github_path'] ?? 'ba/.copilot/skills';
+    $url = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/' . $rolePath;
     $items = github_get($url);
 
     $skills = [];
@@ -106,7 +108,8 @@ function github_list_skills(): array
  */
 function github_fetch_skill_meta(string $slug): ?array
 {
-    $base = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/ba/.copilot/skills/' . rawurlencode($slug);
+    $rolePath = $_SESSION['github_path'] ?? 'ba/.copilot/skills';
+    $base = GITHUB_API_BASE . '/repos/' . GITHUB_REPO_OWNER . '/' . GITHUB_REPO_NAME . '/contents/' . $rolePath . '/' . rawurlencode($slug);
     $files = github_get($base);
 
     foreach ($files as $file) {

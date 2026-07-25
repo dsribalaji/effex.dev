@@ -11,6 +11,25 @@ require_login();
     <title>Settings - SkillApp</title>
     <script>if(localStorage.getItem("daynight-theme")==="carbon"){document.documentElement.classList.add("carbon");}</script>
     <link rel="stylesheet" href="assets/css/app.css?v=<?= filemtime(__DIR__ . '/assets/css/app.css') ?>">
+    <style>
+        .admin-tabs { display:flex; gap:0; margin-bottom:1.5rem; border-bottom:2px solid var(--border-color); }
+        .admin-tab { padding:0.75rem 1.5rem; cursor:pointer; border:none; background:none; font-size:0.9rem; color:var(--text-secondary); border-bottom:2px solid transparent; margin-bottom:-2px; }
+        .admin-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+        .admin-table { width:100%; border-collapse:collapse; font-size:0.875rem; }
+        .admin-table th, .admin-table td { padding:0.6rem 0.8rem; text-align:left; border-bottom:1px solid var(--border-color); }
+        .admin-table th { font-weight:600; color:var(--text-secondary); }
+        .admin-table select { padding:0.3rem 0.5rem; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-primary); color:var(--text-primary); font-size:0.8rem; }
+        .btn-sm { padding:0.3rem 0.6rem; font-size:0.75rem; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-primary); color:var(--text-primary); cursor:pointer; }
+        .btn-sm:hover { background:var(--border-color); }
+        .btn-sm.btn-danger { border-color:var(--danger); color:var(--danger); }
+        .btn-sm.btn-danger:hover { background:var(--danger); color:#fff; }
+        .btn-sm.btn-success { border-color:var(--success, #22c55e); color:var(--success, #22c55e); }
+        .btn-sm.btn-success:hover { background:var(--success, #22c55e); color:#fff; }
+        .admin-role-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:999px; font-size:0.75rem; background:var(--accent); color:#fff; }
+        .admin-section-hidden { display:none !important; }
+        #addRoleForm { margin-top:1rem; padding:1rem; border:1px solid var(--border-color); border-radius:8px; display:none; }
+        #addRoleForm input { width:100%; margin-bottom:0.5rem; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -130,6 +149,38 @@ require_login();
                     </div>
                     <button type="submit" class="btn btn-primary" style="width:auto;padding:0.75rem 2rem;align-self:flex-start">Add Key</button>
                 </form>
+            </div>
+            <!-- Admin Section (shown only to admins) -->
+            <div id="adminSection" style="display:none; margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+              <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:1.5rem;">🔒 Admin Panel</h2>
+              <!-- Tabs -->
+              <div class="admin-tabs">
+                <button class="admin-tab active" data-tab="users">Users</button>
+                <button class="admin-tab" data-tab="roles">Roles</button>
+              </div>
+              <!-- Users panel -->
+              <div id="adminUsers" class="admin-panel">
+                <table class="admin-table">
+                  <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Admin</th><th>Actions</th></tr></thead>
+                  <tbody id="adminUsersBody"></tbody>
+                </table>
+              </div>
+              <!-- Roles panel -->
+              <div id="adminRoles" class="admin-panel" style="display:none">
+                <table class="admin-table">
+                  <thead><tr><th>ID</th><th>Name</th><th>Slug</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+                  <tbody id="adminRolesBody"></tbody>
+                </table>
+                <button id="addRoleBtn" class="btn btn-primary" style="margin-top:1rem">+ Add Role</button>
+                <div id="addRoleForm">
+                  <input type="text" id="newRoleName" class="form-input" placeholder="Role name (e.g. Developer)" style="margin-bottom:0.5rem">
+                  <input type="text" id="newRoleSlug" class="form-input" placeholder="Slug (e.g. developer)" style="margin-bottom:0.5rem">
+                  <input type="text" id="newRoleDesc" class="form-input" placeholder="Description" style="margin-bottom:0.5rem">
+                  <input type="text" id="newRoleGithubPath" class="form-input" placeholder="GitHub path (e.g. developer/.copilot/skills)" style="margin-bottom:0.5rem">
+                  <button id="saveNewRoleBtn" class="btn btn-primary btn-sm">Save Role</button>
+                  <button id="cancelNewRoleBtn" class="btn-sm" style="margin-left:0.5rem">Cancel</button>
+                </div>
+              </div>
             </div>
         </main>
     </div>
@@ -315,6 +366,154 @@ require_login();
         }
 
         await loadKeys();
+    })();
+    </script>
+    <script>
+    (async function() {
+      const ADMIN_API = "api/admin.php";
+      const csrfRes = await fetch("api/csrf_token.php");
+      const csrfData = await csrfRes.json();
+      const csrfToken = csrfData.token;
+
+      let isAdmin = false;
+      try {
+        const res = await fetch(ADMIN_API + "?action=roles");
+        if (res.ok) isAdmin = true;
+      } catch (e) {}
+
+      if (!isAdmin) return;
+
+      const adminSection = document.getElementById("adminSection");
+      if (adminSection) adminSection.style.display = "block";
+
+      const adminUsersBody = document.getElementById("adminUsersBody");
+      const adminRolesBody = document.getElementById("adminRolesBody");
+
+      document.querySelectorAll(".admin-tab").forEach(function(tab) {
+        tab.addEventListener("click", function() {
+          document.querySelectorAll(".admin-tab").forEach(function(t) { t.classList.remove("active"); });
+          tab.classList.add("active");
+          document.querySelectorAll(".admin-panel").forEach(function(p) { p.style.display = "none"; });
+          var target = document.getElementById("admin" + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1));
+          if (target) target.style.display = "block";
+        });
+      });
+
+      async function loadUsers() {
+        var res = await fetch(ADMIN_API + "?action=users");
+        var users = await res.json();
+        adminUsersBody.innerHTML = users.map(function(u) {
+          var isAdm = u.is_admin == 1 || u.is_admin === "1";
+          return "<tr>"
+            + "<td>" + u.id + "</td>"
+            + "<td>" + esc(u.username) + "</td>"
+            + "<td>" + esc(u.email) + "</td>"
+            + "<td>" + roleDropdown(u.id, u.role_id) + "</td>"
+            + "<td>" + (isAdm ? "\ud83d\udc51 Yes" : "\u2014") + "</td>"
+            + "<td>"
+            + "<button class=\"btn-sm " + (isAdm ? "btn-danger\" data-action=\"demote\"" : "btn-success\" data-action=\"promote\"") + "\" data-user-id=\"" + u.id + "\">"
+            + (isAdm ? "Demote" : "Make Admin")
+            + "</button>"
+            + "</td>"
+            + "</tr>";
+        }).join("");
+      }
+
+      function roleDropdown(userId, currentRoleId) {
+        var opts = "<option value=\"0\">\u2014 None \u2014</option>";
+        (window._allRoles || []).forEach(function(r) {
+          opts += "<option value=\"" + r.id + "\"" + (r.id == currentRoleId ? " selected" : "") + ">" + esc(r.name) + "</option>";
+        });
+        return "<select class=\"form-input\" style=\"padding:0.3rem 0.5rem;font-size:0.8rem;\" data-user-id=\"" + userId + "\" onchange=\"updateUserRole(" + userId + ", this.value)\">" + opts + "</select>";
+      }
+
+      window.updateUserRole = async function(userId, roleId) {
+        await fetch(ADMIN_API, {
+          method: "POST",
+          headers: {"Content-Type":"application/json","X-CSRF-Token":csrfToken},
+          body: JSON.stringify({action:"update_role", user_id: userId, role_id: parseInt(roleId) || null})
+        });
+      };
+
+      adminUsersBody.addEventListener("click", async function(e) {
+        var btn = e.target.closest("[data-user-id]");
+        if (!btn) return;
+        var userId = btn.dataset.userId;
+        await fetch(ADMIN_API, {
+          method: "POST",
+          headers: {"Content-Type":"application/json","X-CSRF-Token":csrfToken},
+          body: JSON.stringify({action:"toggle_admin", user_id: parseInt(userId)})
+        });
+        await loadUsers();
+      });
+
+      async function loadRoles() {
+        var res = await fetch(ADMIN_API + "?action=roles");
+        var roles = await res.json();
+        window._allRoles = roles;
+        adminRolesBody.innerHTML = roles.map(function(r) {
+          return "<tr>"
+            + "<td>" + r.id + "</td>"
+            + "<td>" + esc(r.name) + "</td>"
+            + "<td>" + esc(r.slug) + "</td>"
+            + "<td>" + esc(r.description || "") + "</td>"
+            + "<td>" + (r.is_active == 1 || r.is_active === "1" ? "Active" : "Inactive") + "</td>"
+            + "<td>"
+            + "<button class=\"btn-sm btn-danger\" onclick=\"deleteRole(" + r.id + ")\"" + (r.id <= 1 ? " disabled title=\"Cannot delete default role\"" : "") + ">Delete</button>"
+            + "</td>"
+            + "</tr>";
+        }).join("");
+        loadUsers();
+      }
+
+      window.deleteRole = async function(roleId) {
+        if (!confirm("Delete this role? Users assigned to it will lose their role assignment.")) return;
+        await fetch(ADMIN_API, {
+          method: "POST",
+          headers: {"Content-Type":"application/json","X-CSRF-Token":csrfToken},
+          body: JSON.stringify({action:"delete_role", id: roleId})
+        });
+        await loadRoles();
+      };
+
+      document.getElementById("addRoleBtn").addEventListener("click", function() {
+        document.getElementById("addRoleForm").style.display = "block";
+      });
+      document.getElementById("cancelNewRoleBtn").addEventListener("click", function() {
+        document.getElementById("addRoleForm").style.display = "none";
+      });
+      document.getElementById("saveNewRoleBtn").addEventListener("click", async function() {
+        var name = document.getElementById("newRoleName").value.trim();
+        var slug = document.getElementById("newRoleSlug").value.trim();
+        var desc = document.getElementById("newRoleDesc").value.trim();
+        var ghPath = document.getElementById("newRoleGithubPath").value.trim() || ".copilot/skills";
+        if (!name || !slug) { alert("Name and slug are required"); return; }
+        var res = await fetch(ADMIN_API, {
+          method: "POST",
+          headers: {"Content-Type":"application/json","X-CSRF-Token":csrfToken},
+          body: JSON.stringify({action:"add_role", name: name, slug: slug, description: desc, github_path: ghPath})
+        });
+        var data = await res.json();
+        if (data.success) {
+          document.getElementById("addRoleForm").style.display = "none";
+          document.getElementById("newRoleName").value = "";
+          document.getElementById("newRoleSlug").value = "";
+          document.getElementById("newRoleDesc").value = "";
+          document.getElementById("newRoleGithubPath").value = "";
+          await loadRoles();
+        } else {
+          alert(data.error || "Failed to add role");
+        }
+      });
+
+      function esc(s) {
+        if (s == null) return "";
+        var d = document.createElement("div");
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      await loadRoles();
     })();
     </script>
 </body>
