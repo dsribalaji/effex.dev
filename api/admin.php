@@ -65,6 +65,10 @@ switch ($action) {
             $stmt->execute([$roleId, $userId]);
         }
         log_role_change($userId, current_user_id(), $roleId);
+        // Refresh session if user changed their own role
+        if ($userId === current_user_id()) {
+            session_refresh_role($userId);
+        }
         echo json_encode(['success' => true]);
         break;
 
@@ -117,7 +121,7 @@ switch ($action) {
         }
         break;
 
-    /* ── Delete a role ── */
+    /* ── Delete (deactivate) a role ── */
     case 'delete_role':
         if ($method !== 'POST') { http_response_code(405); exit; }
         $input = json_decode(file_get_contents('php://input'), true);
@@ -127,9 +131,7 @@ switch ($action) {
             echo json_encode(['error' => 'Invalid role id']);
             exit;
         }
-        // Set users with this role to null first
-        $pdo->prepare('UPDATE users SET role_id = NULL WHERE role_id = ?')->execute([$roleId]);
-        $pdo->prepare('DELETE FROM roles WHERE id = ?')->execute([$roleId]);
+        $pdo->prepare('UPDATE roles SET is_active = 0 WHERE id = ?')->execute([$roleId]);
         echo json_encode(['success' => true]);
         break;
 
