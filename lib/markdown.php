@@ -5,17 +5,38 @@
  */
 function markdown_to_html(string $md): string
 {
-    $html = $md;
+    // Treat all raw HTML as text. Only this renderer may introduce tags.
+    $html = htmlspecialchars(str_replace(["\0", "\x1A"], '', $md), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $fragments = [];
+    $protect = function (string $html) use (&$fragments): string {
+        $index = count($fragments);
+        // Resolve earlier code fragments inside a link label before protecting it.
+        $html = preg_replace_callback('/\x1A(\d+)\x1A/', function ($m) use (&$fragments) {
+            return $fragments[(int)$m[1]] ?? '';
+        }, $html);
+        $fragments[] = $html;
+        return "\x1A" . $index . "\x1A";
+    };
 
-    // Code blocks (```...```) — preserve
-    $html = preg_replace_callback('/```(\w*)\n([\s\S]*?)```/', function ($m) {
-        $lang = htmlspecialchars($m[1]);
-        $code = htmlspecialchars($m[2]);
-        return $lang ? "<pre><code class=\"language-$lang\">$code</code></pre>" : "<pre><code>$code</code></pre>";
+    // Protect code from later Markdown substitutions (including links).
+    $html = preg_replace_callback('/```(\w*)\n([\s\S]*?)```/', function ($m) use ($protect) {
+        $lang = $m[1];
+        $class = $lang !== '' ? ' class="language-' . $lang . '"' : '';
+        return "\n\n" . $protect('<pre><code' . $class . '>' . $m[2] . '</code></pre>') . "\n\n";
+    }, $html);
+    $html = preg_replace_callback('/`([^`\n]+)`/', function ($m) use ($protect) {
+        return $protect('<code>' . $m[1] . '</code>');
     }, $html);
 
-    // Inline code
-    $html = preg_replace('/`([^`]+)`/', '<code>$1</code>', $html);
+    // Explicitly allow only absolute HTTP(S) and mailto links, never script/data URLs.
+    $html = preg_replace_callback('/\[([^\]\n]+)\]\(([^)\s]+)\)/', function ($m) use ($protect) {
+        $url = html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (preg_match('/[\x00-\x20\x7f]/', $url) ||
+            !preg_match('~^(?:https?://[^/]+|mailto:[^@]+@[^@]+)~i', $url)) {
+            return $m[1];
+        }
+        return $protect('<a href="' . htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . $m[1] . '</a>');
+    }, $html);
 
     // Headings
     $html = preg_replace('/^### (.+)$/m', '<h3>$1</h3>', $html);
@@ -29,9 +50,6 @@ function markdown_to_html(string $md): string
     $html = preg_replace('/\*\*\*(.+?)\*\*\*/', '<strong><em>$1</em></strong>', $html);
     $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html);
     $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html);
-
-    // Links
-    $html = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2">$1</a>', $html);
 
     // Unordered lists
     $html = preg_replace_callback('/(?:^- .+\n?)+/m', function ($m) {
@@ -61,14 +79,16 @@ function markdown_to_html(string $md): string
     $paragraphs = preg_split('/\n\n+/', $html);
     $html = '';
     foreach ($paragraphs as $p) {
-        $p = trim($p);
+        $p = trim($p, " \n\r\t\v");
         if ($p === '') continue;
-        if (preg_match('/^<(h[1-3]|ul|ol|li|table|pre|hr|blockquote)/', $p)) {
+        if (preg_match('/^<(h[1-3]|ul|ol|li|table|pre|hr|blockquote)/', $p) || preg_match('/^\x1A\d+\x1A$/', $p)) {
             $html .= $p . "\n";
         } else {
             $html .= '<p>' . $p . "</p>\n";
         }
     }
 
-    return $html;
+    return preg_replace_callback('/\x1A(\d+)\x1A/', function ($m) use ($fragments) {
+        return $fragments[(int)$m[1]] ?? '';
+    }, $html);
 }
