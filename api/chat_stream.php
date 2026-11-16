@@ -132,7 +132,13 @@ foreach ($history as $h) {
 }
 
 /* ── Resolve API key: each user must bring their own (config constants only as local-dev fallback) ── */
-$activeKey = api_key_get_active($userId);
+try {
+    $activeKey = api_key_get_active($userId);
+} catch (RuntimeException $e) {
+    echo "data: " . json_encode(['error' => 'API key storage needs administrator configuration or migration.']) . "\n\n";
+    ob_flush(); flush();
+    exit;
+}
 if ($activeKey) {
     $provider = $activeKey['provider'] ?? 'openai-compatible';
     $apiKey = $activeKey['api_key'];

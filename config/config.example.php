@@ -21,3 +21,8 @@ define('MAX_CONTEXT_MESSAGES', 10);
 
 // Optional: local clone of the skills repo for testing/tuning skills without GitHub.
 // define('SKILLS_LOCAL_PATH', '/path/to/AI-Skills');
+
+// Required for saved API keys after the security upgrade. Configure the
+// API_KEY_ENCRYPTION_KEY environment variable in CLI and the web server using
+// your secret manager (base64-encoded 32 random bytes). Never commit the value.
+// Read SECURITY_UPGRADE.md and migrate legacy rows before serving this release.

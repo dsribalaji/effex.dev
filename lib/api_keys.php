@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/key_crypto.php';
 
 /**
  * Get the user's own active API key. There is no shared key —
@@ -59,16 +60,4 @@ function api_key_delete(int $id, int $userId): bool
     $stmt = $pdo->prepare('DELETE FROM api_keys WHERE id = ? AND created_by = ?');
     $stmt->execute([$id, $userId]);
     return $stmt->rowCount() > 0;
-}
-
-function encrypt_api_key(string $key): string
-{
-    // Simple reversible obfuscation — not true encryption (no key management),
-    // but prevents casual exposure if the DB is dumped
-    return base64_encode($key);
-}
-
-function decrypt_api_key(string $encrypted): string
-{
-    return base64_decode($encrypted);
 }

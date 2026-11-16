@@ -38,7 +38,18 @@ switch ($method) {
             exit;
         }
 
-        $id = api_key_create($label, $provider, $baseUrl, $model, $key, $userId);
+        if (!is_string($key) || strlen($key) > 300) {
+            http_response_code(400);
+            echo json_encode(['error' => 'API key must be a string of at most 300 bytes']);
+            exit;
+        }
+        try {
+            $id = api_key_create($label, $provider, $baseUrl, $model, $key, $userId);
+        } catch (RuntimeException $e) {
+            http_response_code(503);
+            echo json_encode(['error' => 'API key storage is unavailable. Contact the administrator.']);
+            exit;
+        }
 
         // If this is the user's first key, auto-activate it
         if (count(api_key_get_all($userId)) === 1) {
